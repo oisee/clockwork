@@ -201,7 +201,80 @@ Each track is a named float channel with keyframes:
 - **smooth**: smoothstep (Hermite)
 - **ramp**: quadratic ease-in
 
-#### 6.5 Event Triggers (music → demo)
+#### 6.5 Effect Registry & Scene Mapping
+
+Each demo effect is registered with its source, build command, and mzx capture config:
+
+```json
+{
+  "effects": [
+    {
+      "id": "plasma",
+      "name": "Attribute Plasma",
+      "source": "chapters/ch09-tunnels/examples/plasma.a80",
+      "build": "sjasmplus --nologo --raw=${bin} --sym=${sym} ${source}",
+      "entry": "0x8000",
+      "params": {
+        "speed": { "addr": "speed", "type": "u8", "default": 3, "range": [1, 10] },
+        "palette": { "addr": "palette_id", "type": "u8", "default": 0, "range": [0, 3] }
+      },
+      "mzx": {
+        "model": "48k",
+        "args": "--run ${bin}@8000",
+        "frames": 100,
+        "border": false
+      }
+    },
+    {
+      "id": "torus",
+      "name": "Wireframe Torus",
+      "source": "demo/src/torus.a80",
+      "build": "cd demo/src && sjasmplus --nologo --raw=${bin} torus.a80",
+      "entry": "0x8000",
+      "params": {
+        "rot_speed": { "addr": "rotation_step", "type": "u8", "default": 2 }
+      },
+      "mzx": {
+        "model": "48k",
+        "args": "--run ${bin}@8000",
+        "frames": 200,
+        "border": false
+      }
+    }
+  ]
+}
+```
+
+**Scenes on the timeline** reference effects with parameter overrides:
+
+```
+Scene @ frame 0-200:   effect="plasma", speed=3, palette=0
+Scene @ frame 200-450: effect="torus",  rot_speed=4
+Scene @ frame 450-700: effect="plasma", speed=7, palette=2
+```
+
+**Parameter injection** (how values reach the Z80 code):
+
+| Method | How | Pros | Cons |
+|--------|-----|------|------|
+| **Symbol patching** | sjasmplus `--sym` exports labels → patch binary at symbol address | Clean, uses existing labels | Need symbol file per build |
+| **mzx --load + --set** | `--load bin@8000 --set MEM[8100]=03` | No recompile needed | mzx must support MEM[] syntax |
+| **Fixed param block** | Convention: params always at `$8100` | Simple, predictable | Rigid |
+| **Pre-baked binaries** | Compile once per param combo | Guaranteed correct | Combinatorial explosion |
+
+Recommended: **symbol patching** (Phase 3) with **fixed param block** as fallback (Phase 1).
+
+**Preview workflow:**
+1. User places scene on timeline (click + drag)
+2. Clockwork compiles .a80 → .bin (calls sjasmplus)
+3. Patches parameters into .bin at symbol addresses
+4. Runs `mzx --run patched.bin@8000 --frames N --screenshot frame.png`
+5. Displays captured frame as thumbnail on the timeline
+6. User can scrub through a scene and see different frames
+
+This requires a **local backend** (Python/Node) for Phase 3+ — browser can't run sjasmplus/mzx directly. Phase 0-2 are pure frontend.
+
+#### 6.6 Event Triggers (music → demo)
 
 User defines trigger rules:
 
