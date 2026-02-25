@@ -1,0 +1,156 @@
+/* Clockwork — dark demoscene aesthetic */
+
+:root {
+  --bg: #0d0d1a;
+  --surface: #1a1a2e;
+  --border: #2a2a4a;
+  --text: #ccccdd;
+  --text-dim: #666688;
+  --accent: #ff3366;
+  --accent-dim: #aa2244;
+  --green: #00ff88;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Header */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+header h1 span {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 8px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+#file-name {
+  color: var(--green);
+  font-size: 12px;
+}
+
+/* Controls */
+#controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+#controls.hidden {
+  display: none;
+}
+
+#controls button {
+  background: var(--border);
+  color: var(--text);
+  border: 1px solid #3a3a5a;
+  padding: 4px 16px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+#controls button:hover {
+  background: #3a3a5a;
+}
+
+#controls button[data-state="playing"] {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+#info-bar {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-left: 12px;
+}
+
+.shortcuts {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.shortcuts kbd {
+  background: var(--border);
+  padding: 1px 5px;
+  border-radius: 2px;
+  border: 1px solid #3a3a5a;
+  font-family: inherit;
+  font-size: 10px;
+}
+
+/* Drop zone */
+#drop-zone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  cursor: pointer;
+}
+
+#drop-zone.loaded {
+  cursor: default;
+}
+
+#drop-zone.dragover::after {
+  content: 'Drop .psg file';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 51, 102, 0.1);
+  border: 2px dashed var(--accent);
+  font-size: 20px;
+  color: var(--accent);
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Timeline canvas */
+#timeline {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Hidden file input */
+#file-input {
+  display: none;
+}

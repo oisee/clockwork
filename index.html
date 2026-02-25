@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clockwork — ZX Spectrum Sync Editor</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>Clockwork <span>PSG Viewer v0.1</span></h1>
+    <span id="file-name"></span>
+  </header>
+
+  <div id="controls" class="hidden">
+    <button id="btn-play" data-state="paused">Play</button>
+    <button id="btn-stop">Stop</button>
+    <span id="info-bar"></span>
+    <span class="shortcuts">
+      <kbd>Space</kbd> play/pause
+      <kbd>&larr;</kbd><kbd>&rarr;</kbd> seek
+      <kbd>Shift</kbd>+arrows = 1 sec
+      <kbd>Home</kbd> reset
+      <kbd>Scroll</kbd> zoom
+    </span>
+  </div>
+
+  <div id="drop-zone">
+    <canvas id="timeline"></canvas>
+  </div>
+
+  <input type="file" id="file-input" accept=".psg">
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
