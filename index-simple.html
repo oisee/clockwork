@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clockwork — ZX Spectrum Sync Editor</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>Clockwork <span>PSG Viewer v0.1</span></h1>
+    <span id="file-name"></span>
+    <button id="btn-demo">Load Demo</button>
+  </header>
+
+  <div id="controls" class="hidden">
+    <button id="btn-play" data-state="paused">Play</button>
+    <button id="btn-stop">Stop</button>
+    <span id="info-bar"></span>
+    <span class="shortcuts">
+      <kbd>Space</kbd> play/pause
+      <kbd>&larr;</kbd><kbd>&rarr;</kbd> seek
+      <kbd>Shift</kbd>+arrows = 1 sec
+      <kbd>Home</kbd> reset
+      <kbd>Scroll</kbd> V-scroll
+      <kbd>Shift</kbd>+scroll H-scroll
+      <kbd>Ctrl+Shift</kbd>+scroll zoom
+    </span>
+  </div>
+
+  <div id="status-bar"></div>
+
+  <div id="main-area">
+    <div id="drop-zone">
+      <canvas id="timeline"></canvas>
+    </div>
+    <div id="preview-panel">
+      <div id="preview-header">
+        <span class="preview-title">Preview</span>
+        <div id="preview-controls">
+          <select id="preview-mode">
+            <option value="prototype">Full Color</option>
+            <option value="spectrum" selected>Spectrum</option>
+            <option value="overlay">Overlay</option>
+            <option value="difference">Difference</option>
+          </select>
+          <label class="toggle-label">
+            <input type="checkbox" id="attr-filter" checked>
+            Attr
+          </label>
+        </div>
+      </div>
+      <div id="preview-canvas-wrap">
+        <canvas id="preview-canvas" width="256" height="192"></canvas>
+      </div>
+      <div id="scene-controls">
+        <select id="scene-effect">
+          <option value="">— no effect —</option>
+          <option value="plasma">Plasma</option>
+          <option value="bars">Bars</option>
+          <option value="lissajous">Lissajous</option>
+          <option value="starfield">Starfield</option>
+        </select>
+        <button id="btn-add-scene">+ Scene</button>
+        <span id="scene-info"></span>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept=".psg">
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

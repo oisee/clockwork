@@ -4,68 +4,50 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Clockwork — ZX Spectrum Sync Editor</title>
+
+  <!-- Golden Layout -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.6.0/dist/css/goldenlayout-base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.6.0/dist/css/themes/goldenlayout-dark-theme.css">
+
+  <!-- App styles -->
   <link rel="stylesheet" href="css/style.css">
+
+  <!-- Import map for clean ES module imports -->
+  <script type="importmap">
+  {
+    "imports": {
+      "golden-layout": "https://esm.sh/golden-layout@2.6.0",
+      "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.min.js"
+    }
+  }
+  </script>
 </head>
 <body>
+  <!-- Top toolbar (outside Golden Layout) -->
   <header>
-    <h1>Clockwork <span>PSG Viewer v0.1</span></h1>
+    <h1>Clockwork <span>Sync Editor v0.2</span></h1>
     <span id="file-name"></span>
-    <button id="btn-demo">Load Demo</button>
-  </header>
-
-  <div id="controls" class="hidden">
-    <button id="btn-play" data-state="paused">Play</button>
-    <button id="btn-stop">Stop</button>
+    <div class="header-controls">
+      <button id="btn-demo">Demo</button>
+      <button id="btn-play" data-state="paused">Play</button>
+      <button id="btn-stop">Stop</button>
+    </div>
     <span id="info-bar"></span>
     <span class="shortcuts">
-      <kbd>Space</kbd> play/pause
-      <kbd>&larr;</kbd><kbd>&rarr;</kbd> seek
-      <kbd>Shift</kbd>+arrows = 1 sec
-      <kbd>Home</kbd> reset
-      <kbd>Scroll</kbd> V-scroll
-      <kbd>Shift</kbd>+scroll H-scroll
-      <kbd>Ctrl+Shift</kbd>+scroll zoom
+      <kbd>Space</kbd> play
+      <kbd>&larr;&rarr;</kbd> seek
+      <kbd>Scroll</kbd> V
+      <kbd>Shift</kbd> H
+      <kbd>Ctrl+Shift</kbd> zoom
+      <kbd>DblClick</kbd> fold
     </span>
-  </div>
+  </header>
 
+  <!-- Golden Layout container -->
+  <div id="layout-container"></div>
+
+  <!-- Status bar (outside Golden Layout) -->
   <div id="status-bar"></div>
-
-  <div id="main-area">
-    <div id="drop-zone">
-      <canvas id="timeline"></canvas>
-    </div>
-    <div id="preview-panel">
-      <div id="preview-header">
-        <span class="preview-title">Preview</span>
-        <div id="preview-controls">
-          <select id="preview-mode">
-            <option value="prototype">Full Color</option>
-            <option value="spectrum" selected>Spectrum</option>
-            <option value="overlay">Overlay</option>
-            <option value="difference">Difference</option>
-          </select>
-          <label class="toggle-label">
-            <input type="checkbox" id="attr-filter" checked>
-            Attr
-          </label>
-        </div>
-      </div>
-      <div id="preview-canvas-wrap">
-        <canvas id="preview-canvas" width="256" height="192"></canvas>
-      </div>
-      <div id="scene-controls">
-        <select id="scene-effect">
-          <option value="">— no effect —</option>
-          <option value="plasma">Plasma</option>
-          <option value="bars">Bars</option>
-          <option value="lissajous">Lissajous</option>
-          <option value="starfield">Starfield</option>
-        </select>
-        <button id="btn-add-scene">+ Scene</button>
-        <span id="scene-info"></span>
-      </div>
-    </div>
-  </div>
 
   <input type="file" id="file-input" accept=".psg">
   <script type="module" src="js/app.js"></script>

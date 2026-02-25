@@ -34,6 +34,10 @@ const COLORS = {
   toneA: '#00aa55',
   toneB: '#2255aa',
   toneC: '#aa7700',
+  // Collapsed music summary
+  musicSummary: '#557799',
+  foldButton: '#444466',
+  foldButtonHover: '#555588',
   // Scrollbar
   scrollTrack: '#111122',
   scrollThumb: '#3a3a5a',
@@ -59,6 +63,7 @@ export class Timeline {
     this.dragging = false;
     this.onSeek = null;       // callback(frame) when user clicks
     this.sceneManager = null; // set by app.js
+    this.musicCollapsed = false; // fold 8 music rows → 1 summary
 
     // Scrollbar interaction state
     this._scrollbarDrag = null;  // { axis: 'x'|'y', startMouse, startScroll }
@@ -116,12 +121,20 @@ export class Timeline {
     this.render();
   }
 
+  /** Toggle music rows collapsed/expanded. */
+  toggleMusicFold() {
+    this.musicCollapsed = !this.musicCollapsed;
+    this.scrollY = 0;
+    this.render();
+  }
+
   /** Compute row layout dimensions. */
   _layout() {
     const viewW = this.width - SCROLLBAR_SIZE;
     const viewH = this.height - SCROLLBAR_SIZE;
-    const numRows = 9;
-    // Row height: fill the view, but never smaller than MIN_ROW_HEIGHT
+    // Collapsed: 1 music summary + 1 header + 1 scene = 3 virtual rows
+    // Expanded:  1 header + 8 music rows + 1 scene = 10 (we use 9 with fractional)
+    const numRows = this.musicCollapsed ? 3 : 9;
     const rowH = Math.max(MIN_ROW_HEIGHT, viewH / numRows);
     const contentH = rowH * numRows;
     return { viewW, viewH, rowH, contentH, numRows };
@@ -158,6 +171,20 @@ export class Timeline {
 
       this.dragging = true;
       this._seekFromMouse(e);
+    });
+
+    // Double-click to toggle music fold
+    this.canvas.addEventListener('dblclick', (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const my = e.clientY - rect.top;
+      const layout = this._layout();
+      // Check if click is in the music area (not scene track, not scrollbar)
+      const musicBottom = this.musicCollapsed
+        ? layout.rowH * 2 - this.scrollY   // header + summary
+        : layout.rowH * 8 - this.scrollY;  // header + 7 music rows
+      if (my < musicBottom && my < layout.viewH) {
+        this.toggleMusicFold();
+      }
     });
 
     this.canvas.addEventListener('mousemove', (e) => {
@@ -295,19 +322,24 @@ export class Timeline {
     const firstFrame = Math.max(0, Math.floor(scrollX));
     const lastFrame = Math.min(totalFrames - 1, Math.ceil(scrollX + viewW / zoom));
 
-    // Row positions (virtual Y, before scroll offset)
-    const rowDefs = {
-      header: 0,
-      volA: rowH * 1,
-      volB: rowH * 2,
-      volC: rowH * 3,
-      toneA: rowH * 4,
-      toneB: rowH * 4.75,
-      toneC: rowH * 5.5,
-      noise: rowH * 6.25,
-      envelope: rowH * 7,
-      scene: rowH * 8,
-    };
+    // Row positions depend on collapsed state
+    const rowDefs = {};
+    if (this.musicCollapsed) {
+      rowDefs.header = 0;
+      rowDefs.musicSummary = rowH * 1;  // single summary row
+      rowDefs.scene = rowH * 2;
+    } else {
+      rowDefs.header = 0;
+      rowDefs.volA = rowH * 1;
+      rowDefs.volB = rowH * 2;
+      rowDefs.volC = rowH * 3;
+      rowDefs.toneA = rowH * 4;
+      rowDefs.toneB = rowH * 4.75;
+      rowDefs.toneC = rowH * 5.5;
+      rowDefs.noise = rowH * 6.25;
+      rowDefs.envelope = rowH * 7;
+      rowDefs.scene = rowH * 8;
+    }
 
     // Apply scrollY: all row Y positions shift up
     const rows = {};
@@ -341,99 +373,14 @@ export class Timeline {
       }
     }
 
-    // Row labels
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'left';
-    const labels = [
-      [rows.volA, 'Vol A', COLORS.volA],
-      [rows.volB, 'Vol B', COLORS.volB],
-      [rows.volC, 'Vol C', COLORS.volC],
-      [rows.toneA, 'Tone A', COLORS.toneA],
-      [rows.toneB, 'Tone B', COLORS.toneB],
-      [rows.toneC, 'Tone C', COLORS.toneC],
-      [rows.noise, 'Noise', COLORS.noise],
-      [rows.envelope, 'Env', COLORS.envelope],
-    ];
-    for (const [y, label, color] of labels) {
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.5;
-      ctx.fillText(label, 4, y + 10);
-      ctx.globalAlpha = 1.0;
+    // --- Music rendering (collapsed or expanded) ---
+    if (this.musicCollapsed) {
+      this._renderMusicCollapsed(ctx, frames, firstFrame, lastFrame, scrollX, zoom, rows, rowH, viewW);
+    } else {
+      this._renderMusicExpanded(ctx, frames, firstFrame, lastFrame, scrollX, zoom, rows, rowH);
     }
 
-    // Draw register data
-    for (let f = firstFrame; f <= lastFrame; f++) {
-      const r = frames[f];
-      const x = (f - scrollX) * zoom;
-      const bw = Math.max(1, zoom - 0.5); // bar width
-
-      // Volumes (0-15, scaled to row height)
-      const volScale = rowH * 0.9 / 15;
-      const volA = r[8] & 0x0F;
-      const volB = r[9] & 0x0F;
-      const volC = r[10] & 0x0F;
-
-      if (volA > 0) {
-        ctx.fillStyle = COLORS.volA;
-        ctx.globalAlpha = 0.3 + volA / 15 * 0.7;
-        ctx.fillRect(x, rows.volA + rowH - volA * volScale, bw, volA * volScale);
-        ctx.globalAlpha = 1.0;
-      }
-      if (volB > 0) {
-        ctx.fillStyle = COLORS.volB;
-        ctx.globalAlpha = 0.3 + volB / 15 * 0.7;
-        ctx.fillRect(x, rows.volB + rowH - volB * volScale, bw, volB * volScale);
-        ctx.globalAlpha = 1.0;
-      }
-      if (volC > 0) {
-        ctx.fillStyle = COLORS.volC;
-        ctx.globalAlpha = 0.3 + volC / 15 * 0.7;
-        ctx.fillRect(x, rows.volC + rowH - volC * volScale, bw, volC * volScale);
-        ctx.globalAlpha = 1.0;
-      }
-
-      // Tone activity (show as thin bars, brightness = inverse of period = pitch)
-      const mixer = r[7];
-      const toneH = rowH * 0.6;
-      for (let ch = 0; ch < 3; ch++) {
-        const toneEnabled = !((mixer >> ch) & 1);
-        const vol = r[8 + ch] & 0x0F;
-        if (toneEnabled && vol > 0) {
-          const period = r[ch * 2] | ((r[ch * 2 + 1] & 0x0F) << 8);
-          // Map period (1-4095) to brightness (high pitch = bright)
-          const brightness = Math.max(0.2, 1 - Math.log(Math.max(1, period)) / Math.log(4096));
-          const colors = [COLORS.toneA, COLORS.toneB, COLORS.toneC];
-          const yBase = [rows.toneA, rows.toneB, rows.toneC][ch];
-          ctx.fillStyle = colors[ch];
-          ctx.globalAlpha = brightness * 0.8;
-          ctx.fillRect(x, yBase, bw, toneH);
-          ctx.globalAlpha = 1.0;
-        }
-      }
-
-      // Noise
-      const noiseEnabled = ((mixer >> 3) & 7) !== 7; // at least one channel has noise
-      if (noiseEnabled) {
-        const noisePeriod = r[6] & 0x1F;
-        const noiseH = rowH * 0.6;
-        const brightness = noisePeriod > 0 ? Math.max(0.3, 1 - noisePeriod / 31) : 0.8;
-        ctx.fillStyle = COLORS.noise;
-        ctx.globalAlpha = brightness * 0.6;
-        ctx.fillRect(x, rows.noise, bw, noiseH);
-        ctx.globalAlpha = 1.0;
-      }
-
-      // Envelope shape changes
-      if (f > 0 && r[13] !== frames[f - 1][13] && r[13] !== 0xFF) {
-        ctx.fillStyle = COLORS.envelope;
-        ctx.globalAlpha = 0.7;
-        const envH = rowH * 0.6;
-        ctx.fillRect(x, rows.envelope, bw, envH);
-        ctx.globalAlpha = 1.0;
-      }
-    }
-
-    // Drum markers (triangles above timeline)
+    // Drum markers (triangles in header)
     if (this.events?.drums) {
       ctx.fillStyle = COLORS.drum;
       for (const f of this.events.drums) {
@@ -535,6 +482,177 @@ export class Timeline {
 
     // --- Scrollbars ---
     this._drawScrollbars(ctx, w, h, viewW, viewH, totalFrames, contentH);
+  }
+
+  /** Render expanded music: 8 separate rows (Vol A/B/C, Tone A/B/C, Noise, Env). */
+  _renderMusicExpanded(ctx, frames, firstFrame, lastFrame, scrollX, zoom, rows, rowH) {
+    // Row labels
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    const labels = [
+      [rows.volA, 'Vol A', COLORS.volA],
+      [rows.volB, 'Vol B', COLORS.volB],
+      [rows.volC, 'Vol C', COLORS.volC],
+      [rows.toneA, 'Tone A', COLORS.toneA],
+      [rows.toneB, 'Tone B', COLORS.toneB],
+      [rows.toneC, 'Tone C', COLORS.toneC],
+      [rows.noise, 'Noise', COLORS.noise],
+      [rows.envelope, 'Env', COLORS.envelope],
+    ];
+    for (const [y, label, color] of labels) {
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.5;
+      ctx.fillText(label, 4, y + 10);
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Fold indicator
+    ctx.fillStyle = COLORS.foldButton;
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('\u25BC Music', 4, rows.header + 22); // ▼
+
+    // Register data per frame
+    for (let f = firstFrame; f <= lastFrame; f++) {
+      const r = frames[f];
+      const x = (f - scrollX) * zoom;
+      const bw = Math.max(1, zoom - 0.5);
+
+      const volScale = rowH * 0.9 / 15;
+      const volA = r[8] & 0x0F;
+      const volB = r[9] & 0x0F;
+      const volC = r[10] & 0x0F;
+
+      if (volA > 0) {
+        ctx.fillStyle = COLORS.volA;
+        ctx.globalAlpha = 0.3 + volA / 15 * 0.7;
+        ctx.fillRect(x, rows.volA + rowH - volA * volScale, bw, volA * volScale);
+        ctx.globalAlpha = 1.0;
+      }
+      if (volB > 0) {
+        ctx.fillStyle = COLORS.volB;
+        ctx.globalAlpha = 0.3 + volB / 15 * 0.7;
+        ctx.fillRect(x, rows.volB + rowH - volB * volScale, bw, volB * volScale);
+        ctx.globalAlpha = 1.0;
+      }
+      if (volC > 0) {
+        ctx.fillStyle = COLORS.volC;
+        ctx.globalAlpha = 0.3 + volC / 15 * 0.7;
+        ctx.fillRect(x, rows.volC + rowH - volC * volScale, bw, volC * volScale);
+        ctx.globalAlpha = 1.0;
+      }
+
+      const mixer = r[7];
+      const toneH = rowH * 0.6;
+      for (let ch = 0; ch < 3; ch++) {
+        const toneEnabled = !((mixer >> ch) & 1);
+        const vol = r[8 + ch] & 0x0F;
+        if (toneEnabled && vol > 0) {
+          const period = r[ch * 2] | ((r[ch * 2 + 1] & 0x0F) << 8);
+          const brightness = Math.max(0.2, 1 - Math.log(Math.max(1, period)) / Math.log(4096));
+          const colors = [COLORS.toneA, COLORS.toneB, COLORS.toneC];
+          const yBase = [rows.toneA, rows.toneB, rows.toneC][ch];
+          ctx.fillStyle = colors[ch];
+          ctx.globalAlpha = brightness * 0.8;
+          ctx.fillRect(x, yBase, bw, toneH);
+          ctx.globalAlpha = 1.0;
+        }
+      }
+
+      const noiseEnabled = ((mixer >> 3) & 7) !== 7;
+      if (noiseEnabled) {
+        const noisePeriod = r[6] & 0x1F;
+        const noiseH = rowH * 0.6;
+        const brightness = noisePeriod > 0 ? Math.max(0.3, 1 - noisePeriod / 31) : 0.8;
+        ctx.fillStyle = COLORS.noise;
+        ctx.globalAlpha = brightness * 0.6;
+        ctx.fillRect(x, rows.noise, bw, noiseH);
+        ctx.globalAlpha = 1.0;
+      }
+
+      if (f > 0 && r[13] !== frames[f - 1][13] && r[13] !== 0xFF) {
+        ctx.fillStyle = COLORS.envelope;
+        ctx.globalAlpha = 0.7;
+        const envH = rowH * 0.6;
+        ctx.fillRect(x, rows.envelope, bw, envH);
+        ctx.globalAlpha = 1.0;
+      }
+    }
+  }
+
+  /**
+   * Render collapsed music: single summary bar.
+   * Shows combined volume heatmap (3 stacked thin bands for A/B/C),
+   * noise ticks, and envelope markers — all in one row.
+   */
+  _renderMusicCollapsed(ctx, frames, firstFrame, lastFrame, scrollX, zoom, rows, rowH, viewW) {
+    const y = rows.musicSummary;
+    const bandH = rowH / 4;  // divide row into 4 bands: A, B, C, noise+env
+
+    // Label
+    ctx.fillStyle = COLORS.foldButton;
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('\u25B6 Music', 4, y + 10); // ▶
+
+    // Divider lines
+    ctx.strokeStyle = COLORS.grid;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(viewW, y);
+    ctx.moveTo(0, y + rowH);
+    ctx.lineTo(viewW, y + rowH);
+    ctx.stroke();
+
+    // Per-frame data
+    for (let f = firstFrame; f <= lastFrame; f++) {
+      const r = frames[f];
+      const x = (f - scrollX) * zoom;
+      const bw = Math.max(1, zoom - 0.5);
+
+      const volA = r[8] & 0x0F;
+      const volB = r[9] & 0x0F;
+      const volC = r[10] & 0x0F;
+
+      // Channel A band (top)
+      if (volA > 0) {
+        ctx.fillStyle = COLORS.volA;
+        ctx.globalAlpha = 0.4 + volA / 15 * 0.6;
+        ctx.fillRect(x, y + 2, bw, bandH - 1);
+        ctx.globalAlpha = 1.0;
+      }
+      // Channel B band
+      if (volB > 0) {
+        ctx.fillStyle = COLORS.volB;
+        ctx.globalAlpha = 0.4 + volB / 15 * 0.6;
+        ctx.fillRect(x, y + bandH + 1, bw, bandH - 1);
+        ctx.globalAlpha = 1.0;
+      }
+      // Channel C band
+      if (volC > 0) {
+        ctx.fillStyle = COLORS.volC;
+        ctx.globalAlpha = 0.4 + volC / 15 * 0.6;
+        ctx.fillRect(x, y + bandH * 2, bw, bandH - 1);
+        ctx.globalAlpha = 1.0;
+      }
+
+      // Noise + envelope indicator (bottom band)
+      const mixer = r[7];
+      const noiseEnabled = ((mixer >> 3) & 7) !== 7;
+      if (noiseEnabled) {
+        ctx.fillStyle = COLORS.noise;
+        ctx.globalAlpha = 0.5;
+        ctx.fillRect(x, y + bandH * 3, bw, bandH - 2);
+        ctx.globalAlpha = 1.0;
+      }
+      if (f > 0 && r[13] !== frames[f - 1][13] && r[13] !== 0xFF) {
+        ctx.fillStyle = COLORS.envelope;
+        ctx.globalAlpha = 0.6;
+        ctx.fillRect(x, y + bandH * 3, bw, bandH - 2);
+        ctx.globalAlpha = 1.0;
+      }
+    }
   }
 
   _drawScrollbars(ctx, w, h, viewW, viewH, totalFrames, contentH) {

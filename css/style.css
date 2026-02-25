@@ -1,4 +1,4 @@
-/* Clockwork — dark demoscene aesthetic */
+/* Clockwork — dark demoscene aesthetic + Golden Layout */
 
 :root {
   --bg: #0d0d1a;
@@ -29,15 +29,15 @@ body {
 header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
+  gap: 12px;
+  padding: 6px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
 }
 
 header h1 {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 2px;
@@ -48,7 +48,7 @@ header h1 span {
   color: var(--text-dim);
   font-weight: 400;
   font-size: 11px;
-  margin-left: 8px;
+  margin-left: 6px;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -58,183 +58,147 @@ header h1 span {
   font-size: 12px;
 }
 
-#btn-demo {
+.header-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.header-controls button,
+header button {
   background: var(--border);
-  color: var(--text-dim);
+  color: var(--text);
   border: 1px solid #3a3a5a;
-  padding: 2px 10px;
+  padding: 3px 12px;
   font-family: inherit;
   font-size: 11px;
-  cursor: pointer;
-  border-radius: 3px;
-}
-
-#btn-demo:hover {
-  background: #3a3a5a;
-  color: var(--text);
-}
-
-#btn-demo.hidden {
-  display: none;
-}
-
-/* Controls */
-#controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  flex-shrink: 0;
-}
-
-#controls.hidden {
-  display: none;
-}
-
-#controls button {
-  background: var(--border);
-  color: var(--text);
-  border: 1px solid #3a3a5a;
-  padding: 4px 16px;
-  font-family: inherit;
-  font-size: 12px;
   cursor: pointer;
   border-radius: 3px;
   transition: background 0.15s;
 }
 
-#controls button:hover {
+.header-controls button:hover,
+header button:hover {
   background: #3a3a5a;
 }
 
-#controls button[data-state="playing"] {
-  background: var(--accent-dim);
-  border-color: var(--accent);
+button[data-state="playing"] {
+  background: var(--accent-dim) !important;
+  border-color: var(--accent) !important;
 }
 
 #info-bar {
   color: var(--text-dim);
   font-size: 11px;
-  margin-left: 12px;
 }
 
 .shortcuts {
   margin-left: auto;
   color: var(--text-dim);
   font-size: 10px;
+  white-space: nowrap;
 }
 
 .shortcuts kbd {
   background: var(--border);
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 2px;
   border: 1px solid #3a3a5a;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 9px;
 }
 
-/* Status bar (always visible, for errors/loading) */
-#status-bar {
-  padding: 4px 16px;
-  font-size: 11px;
-  color: var(--text-dim);
-  background: var(--bg);
-  min-height: 0;
-  flex-shrink: 0;
-}
-
-#status-bar:empty {
-  display: none;
-}
-
-#status-bar.error {
-  color: #ff4444;
-  background: #1a0a0a;
-}
-
-#status-bar.ok {
-  color: var(--green);
-}
-
-/* Main area — split: timeline (left/fills) + preview panel (right/fixed) */
-#main-area {
+/* Golden Layout container */
+#layout-container {
   flex: 1;
-  display: flex;
   min-height: 0;
 }
 
-/* Drop zone */
-#drop-zone {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  cursor: pointer;
-  min-width: 0;
+/* Override Golden Layout dark theme to match our palette */
+.lm_goldenlayout {
+  background: var(--bg) !important;
 }
 
-#drop-zone.loaded {
-  cursor: default;
+.lm_header {
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--border) !important;
+  height: 24px !important;
 }
 
-#drop-zone.dragover::after {
-  content: 'Drop .psg file';
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 51, 102, 0.1);
-  border: 2px dashed var(--accent);
-  font-size: 20px;
-  color: var(--accent);
-  z-index: 10;
-  pointer-events: none;
+.lm_header .lm_tab {
+  background: var(--surface) !important;
+  color: var(--text-dim) !important;
+  border: 1px solid transparent !important;
+  border-bottom: none !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10px !important;
+  padding: 2px 10px !important;
+  margin-right: 1px !important;
+  height: 22px !important;
 }
 
-/* Timeline canvas */
-#timeline {
+.lm_header .lm_tab.lm_active {
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+  border-bottom-color: var(--bg) !important;
+  background: var(--bg) !important;
+}
+
+.lm_header .lm_tab:hover:not(.lm_active) {
+  color: var(--text) !important;
+  background: #222244 !important;
+}
+
+.lm_content {
+  background: var(--bg) !important;
+  border: none !important;
+}
+
+.lm_splitter {
+  background: var(--border) !important;
+  opacity: 1 !important;
+}
+
+.lm_splitter:hover {
+  background: var(--accent-dim) !important;
+}
+
+/* Panel contents */
+.clockwork-panel {
   width: 100%;
   height: 100%;
-  display: block;
-}
-
-/* Preview panel (right side) */
-#preview-panel {
-  width: 280px;
-  flex-shrink: 0;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-#preview-header {
-  display: flex;
+/* Timeline panel */
+.panel-timeline {
+  position: relative;
+}
+
+.panel-timeline canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Preview panel */
+.panel-preview {
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 4px;
+  gap: 4px;
 }
 
-.preview-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-#preview-controls {
+.preview-toolbar {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  width: 100%;
 }
 
-#preview-controls select {
+.preview-toolbar select {
   background: var(--border);
   color: var(--text);
   border: 1px solid #3a3a5a;
@@ -259,30 +223,51 @@ header h1 span {
   accent-color: var(--accent);
 }
 
-#preview-canvas-wrap {
-  padding: 4px;
+.preview-canvas-wrap {
+  background: #000;
   display: flex;
   justify-content: center;
-  background: #000;
-  border-bottom: 1px solid var(--border);
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-#preview-canvas {
-  width: 256px;
-  height: 192px;
+.preview-canvas-wrap canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-#scene-controls {
-  padding: 8px 10px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
+/* Properties panel */
+.panel-properties {
+  padding: 8px;
+  gap: 8px;
+  overflow-y: auto;
 }
 
-#scene-controls select {
+.panel-properties .section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+.prop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prop-row label {
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 50px;
+}
+
+.prop-row select,
+.prop-row input {
   background: var(--border);
   color: var(--text);
   border: 1px solid #3a3a5a;
@@ -290,28 +275,80 @@ header h1 span {
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 2px;
-  flex: 1;
 }
 
-#scene-controls button {
+.prop-row button {
   background: var(--border);
   color: var(--text);
   border: 1px solid #3a3a5a;
-  padding: 2px 10px;
+  padding: 3px 10px;
   font-family: inherit;
   font-size: 11px;
   cursor: pointer;
   border-radius: 3px;
 }
 
-#scene-controls button:hover {
+.prop-row button:hover {
   background: #3a3a5a;
 }
 
 #scene-info {
   font-size: 10px;
   color: var(--text-dim);
-  width: 100%;
+}
+
+/* Status bar */
+#status-bar {
+  padding: 3px 16px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 22px;
+}
+
+#status-bar:empty {
+  display: none;
+}
+
+#status-bar.error {
+  color: #ff4444;
+  background: #1a0a0a;
+}
+
+#status-bar.ok {
+  color: var(--green);
+}
+
+/* Drop zone overlay (for drag-drop files) */
+.drop-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 51, 102, 0.08);
+  border: 3px dashed var(--accent);
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+.drop-overlay.visible {
+  display: flex;
+}
+
+/* lil-gui overrides */
+.lil-gui {
+  --background-color: var(--surface) !important;
+  --widget-color: var(--border) !important;
+  --text-color: var(--text) !important;
+  --title-background-color: var(--border) !important;
+  --title-text-color: var(--accent) !important;
+  --font-family: 'JetBrains Mono', monospace !important;
+  --font-size: 11px !important;
 }
 
 /* Hidden file input */
