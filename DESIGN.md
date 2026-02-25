@@ -274,7 +274,79 @@ Recommended: **symbol patching** (Phase 3) with **fixed param block** as fallbac
 
 This requires a **local backend** (Python/Node) for Phase 3+ — browser can't run sjasmplus/mzx directly. Phase 0-2 are pure frontend.
 
-#### 6.6 Event Triggers (music → demo)
+#### 6.6 Scene Source Types & Render Pipeline
+
+Regardless of how a scene is produced, the output is always the same: **a sequence of ZX Spectrum screens** (6912 bytes each, or 256×192 pixel buffers). Sources vary; the pipeline normalizes them.
+
+**Source types:**
+
+| Type | Input | How | When to use |
+|------|-------|-----|-------------|
+| **Screenshot catalog** | Directory of `.scr` / `.png` | Link path → indexed by frame offset | Pre-rendered effects, hand-drawn frames, imported from other tools |
+| **Binary + mzx** | `.a80` source → `.bin` | Compile → `mzx --run bin@8000 --frames N` → capture `.scr` per frame | Z80 effects with parameter injection |
+| **mzx script** | Batch file with param sequences | `mzx --batch script.mzx` | Complex capture scenarios, multi-pass |
+| **JS/WebGL prototype** | Canvas/WebGL code in browser | Render to 256×192 canvas, quantize to Spectrum palette | Instant preview, prototyping, no backend needed |
+
+```
+Source A (catalog)  ──→ [scr_000.scr, scr_001.scr, ...]  ─┐
+Source B (mzx)      ──→ [scr_000.scr, scr_001.scr, ...]  ─┤
+Source C (JS/WebGL) ──→ [pixel buffer, pixel buffer, ...]  ─┤
+                                                            ↓
+                                              Unified Screen Sequence
+                                                            ↓
+                                              ┌─ Filter Track ─────┐
+                                              │ gigascreen, fade,  │
+                                              │ flash, invert ...  │
+                                              └────────────────────┘
+                                                            ↓
+                                              Preview / Export / Filmstrip
+```
+
+**JS/WebGL prototype layer:**
+
+The browser can render Spectrum-resolution effects directly (256×192 canvas, Spectrum palette). This gives instant visual feedback without compiling Z80 or running mzx. Use cases:
+- Quick plasma/tunnel/rotozoomer prototypes in JS before writing Z80
+- Parameter scrubbing at 60fps (impossible with mzx capture)
+- "Draft" visuals while real Z80 code is being developed
+- Effect previews in the timeline (thumbnails rendered client-side)
+
+The prototype layer renders to the same screen format, so it can be swapped for the "real" mzx-captured frames later without changing the timeline structure.
+
+**Bidirectional data flow (JS/WebGL ↔ timeline):**
+
+The prototype layer is not just a renderer — it can also be a **source of parameter data**. Example:
+
+```
+Timeline → JS/WebGL:  parameter tracks drive rendering (scrub speed, palette, rotation)
+JS/WebGL → Timeline:  extract computed values back into tracks (polygon coords, colors)
+```
+
+Use case: a 3D torus prototype in WebGL computes vertex positions per frame. Those XY coordinates can be captured as keyframe tracks and exported as Z80 lookup tables. Similarly, a procedural palette generator can export its per-frame color values.
+
+This turns the JS prototype into an **animation authoring tool**: design motion in the browser, capture the parameters, export to Z80 as pre-computed tables. The Z80 code doesn't need to compute the same math — it just reads from a table.
+
+**Render filters (per-range):**
+
+Filters are applied as a **track on the timeline** — enabled/disabled per frame range:
+
+```
+Frame source: [scr_001] [scr_002] [scr_003] [scr_004] [scr_005] ...
+Filter track: |------- gigascreen ON ---------|-- normal --|-- fade out --|
+```
+
+| Filter | What it does | Spectrum relevance |
+|--------|-------------|-------------------|
+| **Gigascreen** | Blend frame N and frame N+1 → 102 effective colors | Classic ZX technique, alternating frames at 50Hz |
+| **Fade to black** | Progressively darken attributes | Scene transitions |
+| **Flash/strobe** | Alternate bright/normal attributes | Drum sync |
+| **Invert** | XOR $FF on pixel data | Glitch effect |
+| **Border color** | Set border per frame (not in .scr, separate track) | Screen-independent |
+
+Gigascreen is the most important: it mixes two adjacent screens by combining their attribute colors, producing up to 102 unique colors from the Spectrum's 15. On real hardware this works because the CRT phosphor blends two alternating frames at 50Hz. In Clockwork, the preview just alpha-blends the two frames.
+
+Filters are **non-destructive** — original screen data is preserved, filters are applied at display/export time. A single screen sequence can have different filters in different ranges.
+
+#### 6.7 Event Triggers (music → demo)
 
 User defines trigger rules:
 
@@ -292,7 +364,7 @@ User defines trigger rules:
 
 This lets the demo **react to music** without manually placing keyframes on every drum hit.
 
-#### 6.6 Export Formats
+#### 6.8 Export Formats
 
 **a) JSON** (for debugging and round-tripping):
 ```json
