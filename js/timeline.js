@@ -105,22 +105,30 @@ export class Timeline {
     });
     window.addEventListener('mouseup', () => { this.dragging = false; });
 
-    // Scroll to zoom
+    // Scroll: plain = zoom, Shift = horizontal scroll
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const frameAtMouse = this.scrollX + mouseX / this.zoom;
 
-      if (e.deltaY < 0) {
-        this.zoom = Math.min(this.maxZoom, this.zoom * 1.2);
+      if (e.shiftKey) {
+        // Horizontal scroll
+        const scrollAmount = (e.deltaY !== 0 ? e.deltaY : e.deltaX) / this.zoom * 3;
+        this.scrollX += scrollAmount;
+        this.scrollX = Math.max(0, this.scrollX);
       } else {
-        this.zoom = Math.max(this.minZoom, this.zoom / 1.2);
-      }
+        // Zoom (keep frame under mouse stable)
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const frameAtMouse = this.scrollX + mouseX / this.zoom;
 
-      // Keep frame under mouse stable
-      this.scrollX = frameAtMouse - mouseX / this.zoom;
-      this.scrollX = Math.max(0, this.scrollX);
+        if (e.deltaY < 0) {
+          this.zoom = Math.min(this.maxZoom, this.zoom * 1.2);
+        } else {
+          this.zoom = Math.max(this.minZoom, this.zoom / 1.2);
+        }
+
+        this.scrollX = frameAtMouse - mouseX / this.zoom;
+        this.scrollX = Math.max(0, this.scrollX);
+      }
       this.render();
     }, { passive: false });
 
