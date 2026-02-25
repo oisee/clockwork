@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clockwork — Prototyping Layer</title>
+  <style>
+    :root {
+      --bg: #0d0d1a;
+      --surface: #1a1a2e;
+      --border: #2a2a4a;
+      --text: #ccccdd;
+      --text-dim: #666688;
+      --accent: #ff3366;
+      --green: #00ff88;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 100vh;
+    }
+    h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    h1 span { color: var(--text-dim); font-weight: 400; font-size: 11px; margin-left: 8px; letter-spacing: 0; text-transform: none; }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px;
+    }
+    .panel h2 {
+      font-size: 12px;
+      color: var(--accent);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Canvas displays */
+    .displays {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .display-box {
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 2px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .display-box canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    .display-box label {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .control-group label {
+      font-size: 11px;
+      color: var(--text-dim);
+      min-width: 60px;
+    }
+    select, input[type="range"], input[type="text"] {
+      background: var(--border);
+      color: var(--text);
+      border: 1px solid #3a3a5a;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+    input[type="range"] { width: 120px; }
+    input[type="text"] { width: 300px; }
+    button {
+      background: var(--border);
+      color: var(--text);
+      border: 1px solid #3a3a5a;
+      padding: 4px 12px;
+      font-family: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    button:hover { background: #3a3a5a; }
+    button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .value-display {
+      font-size: 11px;
+      color: var(--green);
+      min-width: 40px;
+    }
+
+    /* Formula editor */
+    .formula-editor {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .formula-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .formula-row label {
+      font-size: 11px;
+      color: var(--text-dim);
+      min-width: 50px;
+    }
+    .formula-row input {
+      flex: 1;
+    }
+    .formula-row .result {
+      font-size: 11px;
+      color: var(--green);
+      min-width: 80px;
+    }
+
+    /* Status / tax */
+    .status-bar {
+      font-size: 11px;
+      color: var(--text-dim);
+      padding: 4px 0;
+    }
+    .tax { color: #ffaa00; }
+    .frame-counter { color: var(--green); }
+  </style>
+</head>
+<body>
+  <h1>Clockwork <span>Prototyping Layer — Motion Design</span></h1>
+
+  <!-- Displays -->
+  <div class="panel">
+    <h2>Preview</h2>
+    <div class="displays">
+      <div class="display-box">
+        <canvas id="proto-canvas" width="256" height="192" style="width:512px; height:384px;"></canvas>
+        <label>Prototype (full-color)</label>
+      </div>
+      <div class="display-box">
+        <canvas id="spectrum-canvas" width="256" height="192" style="width:512px; height:384px;"></canvas>
+        <label>Spectrum (attribute-filtered)</label>
+      </div>
+      <div class="display-box">
+        <canvas id="composite-canvas" width="256" height="192" style="width:512px; height:384px;"></canvas>
+        <label>Composite</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Effect + playback controls -->
+  <div class="panel">
+    <h2>Effect</h2>
+    <div class="controls">
+      <div class="control-group">
+        <label>Effect:</label>
+        <select id="effect-select">
+          <option value="plasma">Plasma</option>
+          <option value="bars">Bars</option>
+          <option value="lissajous">Lissajous</option>
+          <option value="starfield">Starfield</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Composite:</label>
+        <select id="composite-mode">
+          <option value="overlay">Overlay</option>
+          <option value="difference">Difference</option>
+          <option value="side-by-side">Side by Side</option>
+          <option value="prototype">Prototype Only</option>
+          <option value="spectrum">Spectrum Only</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Alpha:</label>
+        <input type="range" id="alpha-slider" min="0" max="100" value="50">
+        <span class="value-display" id="alpha-value">0.50</span>
+      </div>
+      <div class="control-group">
+        <button id="btn-play" class="active">Play</button>
+        <button id="btn-pause">Pause</button>
+        <button id="btn-reset">Reset</button>
+      </div>
+      <div class="control-group">
+        <label>Speed:</label>
+        <input type="range" id="speed-slider" min="1" max="200" value="100">
+        <span class="value-display" id="speed-value">1.0x</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parameters -->
+  <div class="panel">
+    <h2>Parameters</h2>
+    <div id="param-controls" class="controls"></div>
+  </div>
+
+  <!-- Formula tracks -->
+  <div class="panel">
+    <h2>Formula Tracks</h2>
+    <div class="formula-editor" id="formula-editor">
+      <div class="formula-row">
+        <label>x_pos:</label>
+        <input type="text" data-track="x_pos" value="128 + 80 * sin(t * TAU * 2)">
+        <span class="result" data-result="x_pos">—</span>
+      </div>
+      <div class="formula-row">
+        <label>y_pos:</label>
+        <input type="text" data-track="y_pos" value="96 + 60 * cos(t * TAU * 3)">
+        <span class="result" data-result="y_pos">—</span>
+      </div>
+      <div class="formula-row">
+        <label>scale:</label>
+        <input type="text" data-track="scale" value="0.5 + 0.5 * smoothstep(0, 0.3, t)">
+        <span class="result" data-result="scale">—</span>
+      </div>
+      <div class="formula-row">
+        <label>flash:</label>
+        <input type="text" data-track="flash" value="pulse(fract(beat), 0.0, 0.1)">
+        <span class="result" data-result="flash">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar">
+    <span class="frame-counter" id="frame-info">Frame 0 / 500</span>
+    &nbsp;|&nbsp;
+    <span class="tax" id="tax-info">Tax: —</span>
+    &nbsp;|&nbsp;
+    <span id="fps-info">0 fps</span>
+  </div>
+
+  <script type="module">
+    import { imageDataToSCR, renderSCRToImageData, attributeFilter } from './js/spectrum.js';
+    import { FormulaEngine, Track, PrototypeRenderer, OverlayCompositor } from './js/prototype-layer.js';
+
+    // --- Setup ---
+    const protoCanvas = document.getElementById('proto-canvas');
+    const specCanvas = document.getElementById('spectrum-canvas');
+    const compCanvas = document.getElementById('composite-canvas');
+
+    const renderer = new PrototypeRenderer(protoCanvas);
+    const compositor = new OverlayCompositor(compCanvas);
+    const engine = new FormulaEngine();
+
+    const specCtx = specCanvas.getContext('2d');
+
+    // --- State ---
+    let frame = 0;
+    const totalFrames = 2500; // 50 seconds at 50Hz
+    let playing = true;
+    let speedMul = 1.0;
+    let bpm = 125;
+    let lastTime = 0;
+    let fpsFrames = 0;
+    let fpsTime = 0;
+    let currentFps = 0;
+
+    // Effect parameters (defaults per effect)
+    const effectParams = {
+      plasma:    { speed: 1.0, scale: 1.0, palette: 0 },
+      bars:      { count: 8, speed: 1.0 },
+      lissajous: { freqX: 3, freqY: 2, phase: 0, trail: 0.3 },
+      starfield: { speed: 2.0, density: 1.0 },
+    };
+
+    // Formula tracks (compiled)
+    const formulaTracks = {};
+
+    // --- UI refs ---
+    const effectSelect = document.getElementById('effect-select');
+    const compositeMode = document.getElementById('composite-mode');
+    const alphaSlider = document.getElementById('alpha-slider');
+    const alphaValue = document.getElementById('alpha-value');
+    const speedSlider = document.getElementById('speed-slider');
+    const speedValue = document.getElementById('speed-value');
+    const paramControls = document.getElementById('param-controls');
+    const frameInfo = document.getElementById('frame-info');
+    const taxInfo = document.getElementById('tax-info');
+    const fpsInfo = document.getElementById('fps-info');
+
+    // --- Init formula tracks ---
+    function initFormulas() {
+      document.querySelectorAll('.formula-row input[data-track]').forEach(input => {
+        const name = input.dataset.track;
+        try {
+          formulaTracks[name] = {
+            compiled: engine.compile(input.value), // returns { fn, src }
+            input: input,
+          };
+        } catch (e) {
+          console.warn(`Formula "${name}" error:`, e.message);
+        }
+
+        input.addEventListener('change', () => {
+          try {
+            formulaTracks[name].compiled = engine.compile(input.value);
+            input.style.borderColor = '#3a3a5a';
+          } catch (e) {
+            input.style.borderColor = '#ff4444';
+            console.warn(`Formula "${name}" error:`, e.message);
+          }
+        });
+      });
+    }
+
+    // --- Build parameter sliders for current effect ---
+    function buildParamUI() {
+      const effect = effectSelect.value;
+      const params = effectParams[effect];
+      paramControls.innerHTML = '';
+
+      for (const [key, val] of Object.entries(params)) {
+        const group = document.createElement('div');
+        group.className = 'control-group';
+
+        const label = document.createElement('label');
+        label.textContent = key + ':';
+
+        let control;
+        if (typeof val === 'number' && val % 1 === 0 && key === 'palette') {
+          // Palette selector
+          control = document.createElement('select');
+          ['Rainbow', 'Fire', 'Ice'].forEach((name, i) => {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = name;
+            if (i === val) opt.selected = true;
+            control.appendChild(opt);
+          });
+          control.addEventListener('change', () => { params[key] = parseInt(control.value); });
+        } else {
+          // Slider
+          const isFloat = typeof val === 'number' && (val % 1 !== 0 || key === 'speed' || key === 'trail' || key === 'density' || key === 'phase');
+          control = document.createElement('input');
+          control.type = 'range';
+          control.min = 0;
+          control.max = isFloat ? 100 : 20;
+          control.value = isFloat ? val * 10 : val;
+
+          const valSpan = document.createElement('span');
+          valSpan.className = 'value-display';
+          valSpan.textContent = val.toFixed(isFloat ? 1 : 0);
+
+          control.addEventListener('input', () => {
+            const v = isFloat ? parseFloat(control.value) / 10 : parseInt(control.value);
+            params[key] = v;
+            valSpan.textContent = v.toFixed(isFloat ? 1 : 0);
+          });
+
+          group.appendChild(label);
+          group.appendChild(control);
+          group.appendChild(valSpan);
+          paramControls.appendChild(group);
+          continue;
+        }
+
+        group.appendChild(label);
+        group.appendChild(control);
+        paramControls.appendChild(group);
+      }
+    }
+
+    // --- Evaluate all formula tracks ---
+    function evalFormulas() {
+      const intFrame = Math.floor(frame);
+      const t = intFrame / totalFrames;
+      const beat = intFrame / (50 * 60 / bpm);
+      const vars = { t, frame: intFrame, beat, bpm };
+
+      for (const [name, track] of Object.entries(formulaTracks)) {
+        try {
+          const val = engine.evaluate(track.compiled, vars);
+          const resultEl = document.querySelector(`[data-result="${name}"]`);
+          if (resultEl) resultEl.textContent = typeof val === 'number' ? val.toFixed(2) : String(val);
+        } catch (e) {
+          // Formula error — skip
+        }
+      }
+    }
+
+    // --- Main render loop ---
+    let quantizeEvery = 3; // quantize every N frames (expensive!)
+
+    let lastScrImageData = null;
+
+    function renderFrame(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+
+      // FPS counter
+      fpsFrames++;
+      fpsTime += dt;
+      if (fpsTime >= 1000) {
+        currentFps = Math.round(fpsFrames * 1000 / fpsTime);
+        fpsFrames = 0;
+        fpsTime = 0;
+      }
+
+      // Advance frame
+      if (playing) {
+        frame += speedMul;
+        if (frame >= totalFrames) frame = 0;
+      }
+
+      const intFrame = Math.floor(frame);
+      const effect = effectSelect.value;
+      const params = { ...effectParams[effect], frame: intFrame, t: intFrame / totalFrames };
+
+      // 1. Render prototype effect
+      renderer.render(effect, params);
+      const protoImageData = renderer.getImageData();
+
+      // 2. Attribute-quantize (expensive — do periodically)
+      if (!lastScrImageData || intFrame % quantizeEvery === 0) {
+        const { scr, tax } = imageDataToSCR(protoImageData);
+        lastScrImageData = renderSCRToImageData(scr);
+        taxInfo.textContent = `Tax: ${tax.toLocaleString()} (err/cell: ${(tax / 768).toFixed(0)})`;
+      }
+      specCtx.putImageData(lastScrImageData, 0, 0);
+
+      // 3. Composite
+      compositor.mode = compositeMode.value;
+      compositor.alpha = parseFloat(alphaSlider.value) / 100;
+      compositor.compose(lastScrImageData, protoImageData);
+
+      // 4. Evaluate formula tracks
+      evalFormulas();
+
+      // 5. Update UI
+      frameInfo.textContent = `Frame ${intFrame} / ${totalFrames}`;
+      fpsInfo.textContent = `${currentFps} fps`;
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    // --- Event listeners ---
+    effectSelect.addEventListener('change', buildParamUI);
+
+    compositeMode.addEventListener('change', () => {
+      // Nothing extra needed — renderFrame reads it
+    });
+
+    alphaSlider.addEventListener('input', () => {
+      alphaValue.textContent = (parseFloat(alphaSlider.value) / 100).toFixed(2);
+    });
+
+    speedSlider.addEventListener('input', () => {
+      speedMul = parseFloat(speedSlider.value) / 100;
+      speedValue.textContent = speedMul.toFixed(1) + 'x';
+    });
+
+    document.getElementById('btn-play').addEventListener('click', () => { playing = true; });
+    document.getElementById('btn-pause').addEventListener('click', () => { playing = false; });
+    document.getElementById('btn-reset').addEventListener('click', () => { frame = 0; });
+
+    // --- Boot ---
+    initFormulas();
+    buildParamUI();
+    requestAnimationFrame(renderFrame);
+  </script>
+</body>
+</html>

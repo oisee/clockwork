@@ -421,6 +421,214 @@ Per track:
     Interpolation: 1 byte
 ```
 
+#### 6.9 Prototyping Layer (Motion Design)
+
+The JS/WebGL layer (§6.6) is more than a preview renderer — it is a **motion-design authoring environment**, closer to Cavalry or After Effects expressions than to a simple canvas. You design parametric animations at full fidelity, then push them down to the ZX Spectrum's 256×192 attribute grid. The creative work happens in the browser; Z80 just plays back pre-computed data.
+
+##### 6.9.1 Parametric Formula Engine
+
+Every sync track (§6.4) can carry a **per-frame expression** instead of (or in addition to) manually placed keyframes. The expression is evaluated once per frame and writes the result into the track.
+
+**Available variables:**
+
+| Variable | Type | Meaning |
+|----------|------|---------|
+| `t` | float 0..1 | Normalized time within the current scene |
+| `frame` | int | Absolute frame number from start of project |
+| `beat` | float | Fractional beat counter (derived from BPM) |
+| `bpm` | float | Current tempo (from PT3 speed or user override) |
+
+**Built-in functions:**
+
+| Category | Functions |
+|----------|-----------|
+| Trig | `sin`, `cos`, `atan2`, `PI`, `TAU` |
+| Interpolation | `lerp(a, b, t)`, `smoothstep(edge0, edge1, t)`, `clamp(x, lo, hi)` |
+| Easing | `easeInOut(t)`, `easeIn(t)`, `easeOut(t)` |
+| Bounce / spring | `bounce(t)`, `elastic(t, amplitude, period)` |
+| Noise | `noise(x)`, `noise2d(x, y)` (Simplex) |
+| Utility | `abs`, `floor`, `ceil`, `fract`, `mod`, `sign`, `step` |
+
+**Example expressions:**
+
+```javascript
+// Bouncing horizontal path: 4 full oscillations across the scene
+x = 128 + 80 * sin(t * PI * 4)
+
+// Fade-in over first 10% of scene, hold, fade-out over last 10%
+alpha = smoothstep(0, 0.1, t) * (1 - smoothstep(0.9, 1.0, t))
+
+// Pulse on every beat
+pulse = abs(sin(beat * PI))
+
+// Elastic settle: overshoot then converge
+y = 96 + 40 * elastic(t, 1.2, 0.3)
+```
+
+**Composability**: expressions can reference other tracks by name. The evaluation order is topologically sorted — if track `radius` references track `speed`, then `speed` is evaluated first.
+
+```javascript
+// Track "speed":  lerp(1, 8, t)
+// Track "angle":  angle + speed * 0.02          // integrates speed
+// Track "x":      128 + radius * cos(angle)
+// Track "y":       96 + radius * sin(angle)
+```
+
+This is equivalent to After Effects expressions or Cavalry's formula nodes — except the target canvas is 256×192 and the output can be exported as Z80 lookup tables.
+
+##### 6.9.2 Spectrum Overlay Mode
+
+When prototyping an effect in JS/WebGL, you often want to compare the "ideal" full-color render against the actual ZX Spectrum output (from mzx captures or `.scr` files). The overlay stack makes this a single toggle:
+
+```
+Layer 3: UI overlay (cursor, guides, grid)
+Layer 2: Prototype render (JS/WebGL, full-color)
+Layer 1: Spectrum screen (.scr, attribute-constrained)
+Layer 0: Background (dark canvas)
+
+Composite: selectable blend mode (overlay, difference, side-by-side, split)
+```
+
+**Display modes** (keyboard shortcut cycles through):
+
+| Mode | What you see | Use case |
+|------|-------------|----------|
+| **Prototype only** | Full-color JS/WebGL output at 256×192 | Design without hardware constraints |
+| **Spectrum only** | Attribute-constrained `.scr` frame | Final output verification |
+| **Overlay** | Both layers composited, adjustable alpha | Spot divergence between ideal and real |
+| **Difference** | `abs(prototype - spectrum)` per pixel | Quantify error — bright = large mismatch |
+| **Side-by-side** | Left: prototype, Right: spectrum | Quick A/B comparison |
+| **Split** | Draggable vertical divider | Pixel-level comparison at boundary |
+
+**Workflow**: design a plasma in JS → overlay it on the Z80-rendered plasma captured by mzx → see exactly where the attribute grid causes banding, where colors collapse, where motion diverges. Adjust JS parameters until the prototype closely matches what the hardware can actually produce — then export the parameters as Z80 tables.
+
+##### 6.9.3 Attribute Filter (Spectrum Quantizer)
+
+Any RGB image (from the prototype layer, a screenshot, or an imported PNG) can be passed through the **Spectrum Quantizer** to see what it would look like on real ZX Spectrum hardware.
+
+**ZX Spectrum attribute constraints:**
+
+```
+Screen resolution:  256 × 192 pixels
+Cell grid:          32 × 24 cells (each 8×8 pixels)
+Colors per cell:    2 (ink + paper)
+Palette:            15 colors (8 normal + 7 bright; black = black)
+Pixel depth:        1 bit per pixel within each cell
+```
+
+**Quantization algorithm (per 8×8 cell):**
+
+```
+For each cell (8×8 pixels):
+  1. Collect all 64 RGB pixel values
+  2. Pick the best (ink, paper) pair from the Spectrum palette
+  3. Assign each pixel to ink or paper (nearest color)
+  4. Store: 8 bytes pixel data + 1 byte attribute
+```
+
+**The 15-color Spectrum palette:**
+
+| Index | Normal | Bright |
+|-------|--------|--------|
+| 0 | Black `#000000` | — (same) |
+| 1 | Blue `#0000CD` | `#0000FF` |
+| 2 | Red `#CD0000` | `#FF0000` |
+| 3 | Magenta `#CD00CD` | `#FF00FF` |
+| 4 | Green `#00CD00` | `#00FF00` |
+| 5 | Cyan `#00CDCD` | `#00FFFF` |
+| 6 | Yellow `#CDCD00` | `#FFFF00` |
+| 7 | White `#CDCDCD` | `#FFFFFF` |
+
+The quantizer applies the filter in real-time as the user scrubs the timeline — every prototype frame is shown both "ideal" and "Spectrum-ified" simultaneously (via overlay mode, §6.9.2).
+
+##### 6.9.4 Auto-Diver: Optimal Attribute Assignment
+
+The naive quantizer (§6.9.3) picks ink/paper per cell independently. The **Auto-Diver** does it optimally: for each 8×8 cell, brute-force all possible attribute combinations and pick the one that minimizes pixel error.
+
+**Combinatorics:**
+
+```
+15 colors → C(15,2) + 15 = 105 + 15 = 120 ink/paper pairs
+  (but ink=paper is useless for most cells, so effectively 105)
+× 768 cells per screen
+= 80,640 evaluations per frame (trivial at JS speed)
+```
+
+**Error metric (per cell):**
+
+```
+For a candidate (ink_rgb, paper_rgb):
+  error = 0
+  For each of the 64 pixels in the cell:
+    d_ink   = (r - ink_r)² + (g - ink_g)² + (b - ink_b)²
+    d_paper = (r - paper_r)² + (g - paper_g)² + (b - paper_b)²
+    pixel_bit = (d_ink < d_paper) ? 1 : 0
+    error += min(d_ink, d_paper)
+  Total cell error = error
+```
+
+**Tax metric**: the sum of cell errors across all 768 cells gives a single number — the "color tax" of Spectrum quantization. Lower is better. Useful for comparing effect variants: "this palette has tax 1.2M, that one has 0.8M — use the second."
+
+**Temporal coherence (animation mode):**
+
+For animations, the Auto-Diver can add a **flicker penalty** to the error metric:
+
+```
+cell_cost = pixel_error + λ * attribute_changed(prev_frame)
+```
+
+Where `λ` weights the cost of changing a cell's attribute between consecutive frames. High `λ` = stable attributes (less flicker), at the cost of worse per-frame color accuracy. This prevents the "attribute shimmer" problem where optimal per-frame assignment causes distracting flickering.
+
+**Dithering extensions:**
+
+Within the 1-bit-per-pixel constraint, dithering can improve perceived quality:
+
+| Method | Description | Best for |
+|--------|-------------|----------|
+| **None** | Nearest-color threshold | Hard edges, text, geometric patterns |
+| **Ordered (Bayer 4×4)** | Fixed threshold pattern within cell | Gradients, smooth shading |
+| **Floyd-Steinberg (cell-local)** | Error diffusion within 8×8 cell boundary | Photographic images, complex scenes |
+| **Atkinson** | Modified FS, diffuses only 6/8 of error | Lighter look, classic Mac aesthetic |
+
+Dithering is applied **within each cell independently** — error does not cross cell boundaries (because ink/paper changes at cell edges).
+
+##### 6.9.5 Prototype → Z80 Pipeline
+
+Two paths from prototype to playable demo:
+
+```
+Path A: Parameter Export
+┌───────────────┐    ┌──────────────────┐    ┌──────────────┐
+│  JS Prototype  │ →  │ Extract per-frame │ →  │ Z80 lookup   │
+│  (motion design)│    │ parameter values  │    │ tables (.a80)│
+└───────────────┘    └──────────────────┘    └──────────────┘
+  Design curves,       x[0]=128, x[1]=134,    DB 128, 134,
+  tweak formulas       x[2]=146, ...           146, ...
+
+Path B: Screen Export
+┌───────────────┐    ┌──────────────────┐    ┌──────────────┐
+│  JS Prototype  │ →  │ Attribute Quantize │ →  │ .scr sequence│
+│  (full-color)  │    │ (Auto-Diver)       │    │ (6912 B each)│
+└───────────────┘    └──────────────────┘    └──────────────┘
+  Render 256×192       Apply §6.9.4           Ready for Z80
+  RGB frames           constraints            playback engine
+```
+
+**Path A** is for effects where Z80 computes the visuals but needs motion data (rotation angles, positions, palette indices). The JS prototype designs the motion; Z80 code uses the exported tables as input.
+
+**Path B** is for effects where the entire screen is pre-rendered. The JS prototype produces the frames; the Auto-Diver quantizes them; Z80 code just streams `.scr` data to VRAM. This is how full-screen video effects (plasma, tunnel, rotozoomer) can be prototyped rapidly and then baked for playback.
+
+**Export formats:**
+
+| Format | Content | Size per frame | Use case |
+|--------|---------|---------------|----------|
+| `.a80` lookup table | `DB` values for N parameters | N bytes | Path A — parameter playback |
+| `.scr` sequence | 6912-byte Spectrum screens | 6912 bytes | Path B — screen streaming |
+| `.bin` packed | Delta-compressed `.scr` sequence | Variable | Path B — memory-constrained |
+| JSON keyframes | Frame→value pairs per track | — | Round-trip back to Clockwork |
+
+The creative work — choosing curves, adjusting timing, tuning palettes — happens in the browser at 60fps. The Z80 code is a playback engine that reads pre-computed data. This separation means the motion design can be iterated without touching Z80 assembly.
+
 ### 7. User Workflow
 
 ```
