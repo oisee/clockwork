@@ -28,8 +28,41 @@
 
   <div id="status-bar"></div>
 
-  <div id="drop-zone">
-    <canvas id="timeline"></canvas>
+  <div id="main-area">
+    <div id="drop-zone">
+      <canvas id="timeline"></canvas>
+    </div>
+    <div id="preview-panel">
+      <div id="preview-header">
+        <span class="preview-title">Preview</span>
+        <div id="preview-controls">
+          <select id="preview-mode">
+            <option value="prototype">Full Color</option>
+            <option value="spectrum" selected>Spectrum</option>
+            <option value="overlay">Overlay</option>
+            <option value="difference">Difference</option>
+          </select>
+          <label class="toggle-label">
+            <input type="checkbox" id="attr-filter" checked>
+            Attr
+          </label>
+        </div>
+      </div>
+      <div id="preview-canvas-wrap">
+        <canvas id="preview-canvas" width="256" height="192"></canvas>
+      </div>
+      <div id="scene-controls">
+        <select id="scene-effect">
+          <option value="">— no effect —</option>
+          <option value="plasma">Plasma</option>
+          <option value="bars">Bars</option>
+          <option value="lissajous">Lissajous</option>
+          <option value="starfield">Starfield</option>
+        </select>
+        <button id="btn-add-scene">+ Scene</button>
+        <span id="scene-info"></span>
+      </div>
+    </div>
   </div>
 
   <input type="file" id="file-input" accept=".psg">

@@ -7,6 +7,7 @@
  *   - Noise activity
  *   - Envelope triggers
  *   - Drum hit markers
+ *   - Scene track (colored blocks for visual effects)
  *   - Playback cursor
  */
 
@@ -42,6 +43,7 @@ export class Timeline {
     this.maxZoom = 20;
     this.dragging = false;
     this.onSeek = null;     // callback(frame) when user clicks
+    this.sceneManager = null; // set by app.js
 
     this._bindEvents();
 
@@ -179,8 +181,8 @@ export class Timeline {
     const firstFrame = Math.max(0, Math.floor(scroll));
     const lastFrame = Math.min(totalFrames - 1, Math.ceil(scroll + w / zoom));
 
-    // Layout: divide height into rows
-    const rowH = h / 8;
+    // Layout: divide height into rows (9 rows: 8 music + 1 scene)
+    const rowH = h / 9;
     const rows = {
       header: 0,
       volA: rowH * 1,
@@ -191,6 +193,7 @@ export class Timeline {
       toneC: rowH * 5.5,
       noise: rowH * 6.25,
       envelope: rowH * 7,
+      scene: rowH * 8,
     };
 
     // Grid lines (every 50 frames = 1 second, every 10 frames)
@@ -317,6 +320,63 @@ export class Timeline {
         ctx.lineTo(x - 3, rows.header + 20);
         ctx.lineTo(x + 3, rows.header + 20);
         ctx.fill();
+      }
+    }
+
+    // Scene track
+    if (this.sceneManager) {
+      const sceneY = rows.scene;
+      const sceneH = rowH * 0.85;
+      const scenes = this.sceneManager.getInRange(firstFrame, lastFrame + 1);
+
+      // Scene track label
+      ctx.fillStyle = COLORS.textDim;
+      ctx.globalAlpha = 0.5;
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('Scene', 4, sceneY + 10);
+      ctx.globalAlpha = 1.0;
+
+      // Divider line above scene track
+      ctx.strokeStyle = COLORS.gridMajor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, sceneY - 1);
+      ctx.lineTo(w, sceneY - 1);
+      ctx.stroke();
+
+      for (const scene of scenes) {
+        const x1 = Math.max(0, (scene.start - scroll) * zoom);
+        const x2 = Math.min(w, (scene.end - scroll) * zoom);
+        if (x2 <= x1) continue;
+
+        // Filled block
+        ctx.fillStyle = scene.color;
+        ctx.globalAlpha = 0.3;
+        ctx.fillRect(x1, sceneY + 2, x2 - x1, sceneH);
+        ctx.globalAlpha = 1.0;
+
+        // Border
+        ctx.strokeStyle = scene.color;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x1, sceneY + 2, x2 - x1, sceneH);
+
+        // Label (only if block is wide enough)
+        const blockW = x2 - x1;
+        if (blockW > 40) {
+          ctx.fillStyle = scene.color;
+          ctx.font = 'bold 10px monospace';
+          ctx.textAlign = 'left';
+          ctx.fillText(scene.label, x1 + 4, sceneY + 14);
+
+          // Frame range (smaller, dimmer)
+          if (blockW > 100) {
+            ctx.font = '9px monospace';
+            ctx.globalAlpha = 0.6;
+            ctx.fillText(`${scene.start}-${scene.end}`, x1 + 4, sceneY + sceneH - 2);
+            ctx.globalAlpha = 1.0;
+          }
+        }
       }
     }
 
