@@ -1,28 +1,34 @@
 /**
  * PSG format parser.
  *
- * PSG is a simple AY register dump: 14 registers per frame at 50 Hz (PAL).
+ * Supports two formats:
  *
- * Format:
- *   Header (16 bytes): "PSG" 0x1A version freq padding...
- *   Data stream:
- *     0xFF        — start of new frame
- *     0x00..0x0D  — register number, next byte = value
- *     0xFE nn     — skip nn*4 empty frames
- *     0xFD        — end of music
+ * 1. Binary PSG (header "PSG" + 0x1A):
+ *    Header (16 bytes), then data stream:
+ *      0xFF = frame marker, 0x00..0x0D = register write, 0xFE = skip, 0xFD = end
+ *
+ * 2. Text PSG (zxtune123 dump, starts with "# PSG Dump"):
+ *    Comment lines starting with #, then one line per frame:
+ *    14 hex bytes separated by spaces = R0..R13
  *
  * Returns: { frames: Array<Uint8Array(14)>, totalFrames: number }
  */
 export function parsePSG(buffer) {
   const data = new Uint8Array(buffer);
-  const frames = [];
 
-  // Validate header
-  if (data[0] !== 0x50 || data[1] !== 0x53 || data[2] !== 0x47 || data[3] !== 0x1A) {
-    throw new Error('Not a PSG file (missing "PSG" + 0x1A header)');
+  // Detect format
+  if (data[0] === 0x23) { // '#' = text format
+    return parseTextPSG(buffer);
+  }
+  if (data[0] === 0x50 && data[1] === 0x53 && data[2] === 0x47 && data[3] === 0x1A) {
+    return parseBinaryPSG(data);
   }
 
-  // Current register state — carried forward between frames
+  throw new Error('Unknown PSG format (expected binary "PSG"+0x1A or text "# PSG Dump")');
+}
+
+function parseBinaryPSG(data) {
+  const frames = [];
   const regs = new Uint8Array(14);
 
   let pos = 16; // skip 16-byte header
@@ -31,52 +37,58 @@ export function parsePSG(buffer) {
   while (pos < data.length) {
     const byte = data[pos++];
 
-    if (byte === 0xFD) {
-      // End of music
-      break;
-    }
+    if (byte === 0xFD) break;
 
     if (byte === 0xFF) {
-      // New frame marker — save previous frame if we were in one
-      if (inFrame) {
-        frames.push(new Uint8Array(regs));
-      }
+      if (inFrame) frames.push(new Uint8Array(regs));
       inFrame = true;
       continue;
     }
 
     if (byte === 0xFE) {
-      // Skip N*4 empty frames (re-emit current register state)
-      if (inFrame) {
-        frames.push(new Uint8Array(regs));
-        inFrame = false;
-      }
+      if (inFrame) { frames.push(new Uint8Array(regs)); inFrame = false; }
       const count = (pos < data.length) ? data[pos++] * 4 : 0;
-      for (let i = 0; i < count; i++) {
-        frames.push(new Uint8Array(regs));
-      }
+      for (let i = 0; i < count; i++) frames.push(new Uint8Array(regs));
       continue;
     }
 
-    if (byte <= 0x0D) {
-      // AY register write
-      if (pos < data.length) {
-        regs[byte] = data[pos++];
-      }
+    if (byte <= 0x0D && pos < data.length) {
+      regs[byte] = data[pos++];
     }
-    // bytes 0x0E..0xFB — ignored (MSX device registers)
   }
 
-  // Push final frame if still pending
-  if (inFrame) {
-    frames.push(new Uint8Array(regs));
+  if (inFrame) frames.push(new Uint8Array(regs));
+
+  return { frames, totalFrames: frames.length, durationSeconds: frames.length / 50 };
+}
+
+function parseTextPSG(buffer) {
+  const text = new TextDecoder().decode(buffer);
+  const lines = text.split('\n');
+  const frames = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Skip comments and empty lines
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // Parse hex bytes: "5F 00 1D 01 7D 01 00 38 0E 0E 00 00 00 FF"
+    const parts = trimmed.split(/\s+/);
+    if (parts.length < 14) continue; // need at least 14 register values
+
+    const regs = new Uint8Array(14);
+    for (let i = 0; i < 14; i++) {
+      regs[i] = parseInt(parts[i], 16);
+      if (isNaN(regs[i])) { regs[i] = 0; }
+    }
+    frames.push(regs);
   }
 
-  return {
-    frames,
-    totalFrames: frames.length,
-    durationSeconds: frames.length / 50,
-  };
+  if (frames.length === 0) {
+    throw new Error('No valid frames found in text PSG');
+  }
+
+  return { frames, totalFrames: frames.length, durationSeconds: frames.length / 50 };
 }
 
 /**

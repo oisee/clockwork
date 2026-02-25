@@ -43,9 +43,22 @@ export class Timeline {
     this.dragging = false;
     this.onSeek = null;     // callback(frame) when user clicks
 
-    this.resize();
     this._bindEvents();
-    this.render();
+
+    // Defer initial resize until layout is ready
+    if (typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver(() => {
+        this.resize();
+        this.render();
+      });
+      this._resizeObserver.observe(this.canvas);
+    } else {
+      // Fallback: wait for layout
+      requestAnimationFrame(() => {
+        this.resize();
+        this.render();
+      });
+    }
   }
 
   resize() {

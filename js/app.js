@@ -16,12 +16,20 @@ const fileInput = document.getElementById('file-input');
 const canvas = document.getElementById('timeline');
 const btnPlay = document.getElementById('btn-play');
 const btnStop = document.getElementById('btn-stop');
-const fileName = document.getElementById('file-name');
+const fileNameEl = document.getElementById('file-name');
 const infoBar = document.getElementById('info-bar');
 const controls = document.getElementById('controls');
+const statusBar = document.getElementById('status-bar');
+
+function setStatus(msg, type = '') {
+  console.log(`[clockwork] ${msg}`);
+  statusBar.textContent = msg;
+  statusBar.className = type; // '', 'error', 'ok'
+}
 
 // --- Init ---
 async function init() {
+  console.log('[clockwork] init');
   player = new Player();
   timeline = new Timeline(canvas);
 
@@ -57,47 +65,53 @@ async function init() {
       player.seek(player.currentFrame - step);
     }
   });
+
+  setStatus('Ready — drop a .psg file or click to browse');
 }
 
 // --- File loading ---
-function handleFile(file) {
+async function handleFile(file) {
+  console.log('[clockwork] handleFile:', file.name, file.size, 'bytes');
+
   if (!file.name.toLowerCase().endsWith('.psg')) {
-    showError('Please drop a .psg file');
+    setStatus(`Not a .psg file: ${file.name}`, 'error');
     return;
   }
 
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    try {
-      psg = parsePSG(e.target.result);
-      const events = analyzePSG(psg);
+  setStatus(`Loading ${file.name}...`);
 
-      // Init audio on first file load (requires user gesture)
-      if (!player.audioCtx) {
-        await player.init();
-      }
+  try {
+    const buffer = await file.arrayBuffer();
+    console.log('[clockwork] file read, parsing PSG...');
 
-      player.load(psg);
-      timeline.load(psg, events);
+    psg = parsePSG(buffer);
+    console.log('[clockwork] parsed:', psg.totalFrames, 'frames');
 
-      // Update UI
-      fileName.textContent = file.name;
-      infoBar.textContent = `${psg.totalFrames} frames | ${psg.durationSeconds.toFixed(1)}s | ${events.drums.length} drums detected`;
-      controls.classList.remove('hidden');
-      dropZone.classList.add('loaded');
+    const events = analyzePSG(psg);
+    console.log('[clockwork] analyzed:', events.drums.length, 'drums');
 
-      updatePlayButton(false);
-    } catch (err) {
-      showError(err.message);
+    // Init audio on first file load (requires user gesture)
+    if (!player.audioCtx) {
+      console.log('[clockwork] initializing audio...');
+      await player.init();
+      console.log('[clockwork] audio ready');
     }
-  };
-  reader.readAsArrayBuffer(file);
-}
 
-function showError(msg) {
-  infoBar.textContent = msg;
-  infoBar.style.color = '#ff4444';
-  setTimeout(() => { infoBar.style.color = ''; }, 3000);
+    player.load(psg);
+    timeline.load(psg, events);
+
+    // Update UI
+    fileNameEl.textContent = file.name;
+    infoBar.textContent = `${psg.totalFrames} frames | ${psg.durationSeconds.toFixed(1)}s | ${events.drums.length} drums detected`;
+    controls.classList.remove('hidden');
+    dropZone.classList.add('loaded');
+    setStatus(`Loaded: ${file.name} — ${psg.totalFrames} frames (${psg.durationSeconds.toFixed(1)}s)`, 'ok');
+
+    updatePlayButton(false);
+  } catch (err) {
+    console.error('[clockwork] error:', err);
+    setStatus(`Error: ${err.message}`, 'error');
+  }
 }
 
 // --- Playback controls ---
@@ -133,7 +147,9 @@ dropZone.addEventListener('drop', (e) => {
 });
 
 // Also handle click-to-browse
-dropZone.addEventListener('click', () => {
+dropZone.addEventListener('click', (e) => {
+  // Don't open file dialog if clicking on controls
+  if (e.target.closest('#controls')) return;
   if (!psg) fileInput.click();
 });
 fileInput.addEventListener('change', (e) => {
@@ -142,12 +158,19 @@ fileInput.addEventListener('change', (e) => {
 });
 
 // --- Button handlers ---
-btnPlay.addEventListener('click', togglePlay);
-btnStop.addEventListener('click', () => {
+btnPlay.addEventListener('click', (e) => {
+  e.stopPropagation(); // prevent drop-zone click
+  togglePlay();
+});
+btnStop.addEventListener('click', (e) => {
+  e.stopPropagation();
   player.stop();
   timeline.setFrame(0);
   updatePlayButton(false);
 });
 
 // --- Boot ---
-init();
+init().catch(err => {
+  console.error('[clockwork] init failed:', err);
+  setStatus(`Init failed: ${err.message}`, 'error');
+});

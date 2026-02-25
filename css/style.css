@@ -115,6 +115,29 @@ header h1 span {
   font-size: 10px;
 }
 
+/* Status bar (always visible, for errors/loading) */
+#status-bar {
+  padding: 4px 16px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg);
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+#status-bar:empty {
+  display: none;
+}
+
+#status-bar.error {
+  color: #ff4444;
+  background: #1a0a0a;
+}
+
+#status-bar.ok {
+  color: var(--green);
+}
+
 /* Drop zone */
 #drop-zone {
   flex: 1;

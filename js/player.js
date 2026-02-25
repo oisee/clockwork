@@ -5,6 +5,7 @@ export class Player {
   constructor() {
     this.audioCtx = null;
     this.workletNode = null;
+    this.gainNode = null;
     this.psg = null;          // parsed PSG data
     this.currentFrame = 0;
     this.playing = false;
@@ -17,19 +18,33 @@ export class Player {
 
   async init() {
     this.audioCtx = new AudioContext({ sampleRate: 44100 });
+
+    if (!this.audioCtx.audioWorklet) {
+      throw new Error('AudioWorklet not supported in this browser. Try Chrome or Edge.');
+    }
+
+    console.log('[player] loading worklet...');
     await this.audioCtx.audioWorklet.addModule('js/ayumi-worklet.js');
+    console.log('[player] worklet loaded, creating node...');
+
     this.workletNode = new AudioWorkletNode(this.audioCtx, 'ayumi-audio-processor', {
       numberOfInputs: 0,
       numberOfOutputs: 1,
       outputChannelCount: [2],
     });
-    this.workletNode.connect(this.audioCtx.destination);
+
+    // GainNode for fade-in/out to prevent clicks
+    this.gainNode = this.audioCtx.createGain();
+    this.gainNode.gain.value = 0;
+    this.workletNode.connect(this.gainNode);
+    this.gainNode.connect(this.audioCtx.destination);
 
     // Configure: AY chip (not YM), ZX Spectrum clock 1.7734 MHz, sample rate, ABC stereo
     this.workletNode.port.postMessage({
       msg: 'configure',
       a: [false, 1773400, this.audioCtx.sampleRate, 'ABC'],
     });
+    console.log('[player] configured, ready');
   }
 
   load(psg) {
@@ -43,11 +58,19 @@ export class Player {
     if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
 
     this.playing = true;
-    this.startTime = this.audioCtx.currentTime;
-    this.startFrame = this.currentFrame;
 
-    // Unmute the worklet
+    // Pre-send current frame's registers before unmuting (avoids initial click)
+    this.sendFrame(this.currentFrame);
     this.workletNode.port.postMessage({ msg: 'unmute' });
+
+    // Fade in over 30ms to prevent click
+    const now = this.audioCtx.currentTime;
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(0, now);
+    this.gainNode.gain.linearRampToValueAtTime(1, now + 0.03);
+
+    this.startTime = now;
+    this.startFrame = this.currentFrame;
 
     // Send frames at 50 Hz using audio clock for precision
     const frameDuration = 1 / 50; // 20ms
@@ -84,7 +107,14 @@ export class Player {
       cancelAnimationFrame(this.timer);
       this.timer = null;
     }
-    this.workletNode.port.postMessage({ msg: 'stop' });
+    // Fade out over 15ms then mute
+    if (this.gainNode && this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.gainNode.gain.cancelScheduledValues(now);
+      this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+      this.gainNode.gain.linearRampToValueAtTime(0, now + 0.015);
+    }
+    this.workletNode?.port.postMessage({ msg: 'stop' });
   }
 
   stop() {
