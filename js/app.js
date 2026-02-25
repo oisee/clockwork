@@ -169,6 +169,26 @@ btnStop.addEventListener('click', (e) => {
   updatePlayButton(false);
 });
 
+// --- Demo file ---
+const btnDemo = document.getElementById('btn-demo');
+
+async function loadDemo() {
+  setStatus('Loading demo...');
+  try {
+    const resp = await fetch('demo.psg');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const buffer = await resp.arrayBuffer();
+    const file = new File([buffer], 'demo.psg');
+    await handleFile(file);
+    btnDemo.classList.add('hidden');
+  } catch (err) {
+    console.error('[clockwork] demo load failed:', err);
+    setStatus(`Demo load failed: ${err.message}`, 'error');
+  }
+}
+
+btnDemo.addEventListener('click', loadDemo);
+
 // --- Boot ---
 init().catch(err => {
   console.error('[clockwork] init failed:', err);
