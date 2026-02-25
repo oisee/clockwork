@@ -109,7 +109,11 @@ export class Timeline {
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
 
-      if (e.shiftKey) {
+      if (e.ctrlKey && e.shiftKey) {
+        // Vertical scroll (reserved for future multi-row layouts)
+        // TODO: this.scrollY += e.deltaY
+        return;
+      } else if (e.shiftKey) {
         // Horizontal scroll
         const scrollAmount = (e.deltaY !== 0 ? e.deltaY : e.deltaX) / this.zoom * 3;
         this.scrollX += scrollAmount;
