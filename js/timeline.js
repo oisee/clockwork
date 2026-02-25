@@ -9,6 +9,12 @@
  *   - Drum hit markers
  *   - Scene track (colored blocks for visual effects)
  *   - Playback cursor
+ *   - Horizontal + vertical scrollbars
+ *
+ * Gestures:
+ *   Scroll          = vertical scroll
+ *   Shift+Scroll    = horizontal scroll
+ *   Ctrl+Shift+Scroll = zoom/scale
  */
 
 const COLORS = {
@@ -28,7 +34,15 @@ const COLORS = {
   toneA: '#00aa55',
   toneB: '#2255aa',
   toneC: '#aa7700',
+  // Scrollbar
+  scrollTrack: '#111122',
+  scrollThumb: '#3a3a5a',
+  scrollThumbHover: '#5a5a7a',
+  scrollThumbActive: '#7a7a9a',
 };
+
+const SCROLLBAR_SIZE = 11;   // thickness in px
+const MIN_ROW_HEIGHT = 36;   // minimum row height in px
 
 export class Timeline {
   constructor(canvas) {
@@ -37,13 +51,18 @@ export class Timeline {
     this.psg = null;
     this.events = null;
     this.currentFrame = 0;
-    this.scrollX = 0;       // in frames
-    this.zoom = 4;          // pixels per frame
-    this.minZoom = 1;
-    this.maxZoom = 20;
+    this.scrollX = 0;         // in frames
+    this.scrollY = 0;         // in pixels (into virtual content)
+    this.zoom = 4;            // pixels per frame
+    this.minZoom = 0.5;
+    this.maxZoom = 30;
     this.dragging = false;
-    this.onSeek = null;     // callback(frame) when user clicks
+    this.onSeek = null;       // callback(frame) when user clicks
     this.sceneManager = null; // set by app.js
+
+    // Scrollbar interaction state
+    this._scrollbarDrag = null;  // { axis: 'x'|'y', startMouse, startScroll }
+    this._hoverScrollbar = null; // 'x', 'y', or null
 
     this._bindEvents();
 
@@ -55,7 +74,6 @@ export class Timeline {
       });
       this._resizeObserver.observe(this.canvas);
     } else {
-      // Fallback: wait for layout
       requestAnimationFrame(() => {
         this.resize();
         this.render();
@@ -77,17 +95,19 @@ export class Timeline {
     this.psg = psg;
     this.events = events;
     this.scrollX = 0;
+    this.scrollY = 0;
     this.render();
   }
 
   setFrame(frame) {
     this.currentFrame = frame;
 
-    // Auto-scroll to keep cursor visible
+    // Auto-scroll to keep cursor visible (horizontal only)
+    const viewW = this.width - SCROLLBAR_SIZE;
     const cursorX = (frame - this.scrollX) * this.zoom;
-    const margin = this.width * 0.15;
-    if (cursorX > this.width - margin) {
-      this.scrollX = frame - Math.floor((this.width - margin) / this.zoom);
+    const margin = viewW * 0.15;
+    if (cursorX > viewW - margin) {
+      this.scrollX = frame - Math.floor((viewW - margin) / this.zoom);
     } else if (cursorX < margin) {
       this.scrollX = frame - Math.floor(margin / this.zoom);
     }
@@ -96,45 +116,123 @@ export class Timeline {
     this.render();
   }
 
+  /** Compute row layout dimensions. */
+  _layout() {
+    const viewW = this.width - SCROLLBAR_SIZE;
+    const viewH = this.height - SCROLLBAR_SIZE;
+    const numRows = 9;
+    // Row height: fill the view, but never smaller than MIN_ROW_HEIGHT
+    const rowH = Math.max(MIN_ROW_HEIGHT, viewH / numRows);
+    const contentH = rowH * numRows;
+    return { viewW, viewH, rowH, contentH, numRows };
+  }
+
+  _clampScroll(layout) {
+    const { viewW, viewH, contentH } = layout;
+    const totalFrames = this.psg ? this.psg.totalFrames : 0;
+    // Horizontal: frame-based
+    const maxScrollX = Math.max(0, totalFrames - viewW / this.zoom);
+    this.scrollX = Math.max(0, Math.min(this.scrollX, maxScrollX));
+    // Vertical: pixel-based
+    const maxScrollY = Math.max(0, contentH - viewH);
+    this.scrollY = Math.max(0, Math.min(this.scrollY, maxScrollY));
+  }
+
   _bindEvents() {
-    // Click to seek
+    // Click to seek (or scrollbar drag)
     this.canvas.addEventListener('mousedown', (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      // Check scrollbar hit
+      const sb = this._hitTestScrollbar(mx, my);
+      if (sb) {
+        this._scrollbarDrag = {
+          axis: sb,
+          startMouse: sb === 'x' ? mx : my,
+          startScroll: sb === 'x' ? this.scrollX : this.scrollY,
+        };
+        return;
+      }
+
       this.dragging = true;
       this._seekFromMouse(e);
     });
+
     this.canvas.addEventListener('mousemove', (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      // Scrollbar drag
+      if (this._scrollbarDrag) {
+        const layout = this._layout();
+        const { axis, startMouse, startScroll } = this._scrollbarDrag;
+        if (axis === 'x') {
+          const trackW = layout.viewW;
+          const totalFrames = this.psg ? this.psg.totalFrames : 1;
+          const contentW = totalFrames * this.zoom;
+          const ratio = contentW / trackW;
+          const delta = (mx - startMouse) * ratio / this.zoom;
+          this.scrollX = startScroll + delta;
+        } else {
+          const trackH = layout.viewH;
+          const ratio = layout.contentH / trackH;
+          const delta = (my - startMouse) * ratio;
+          this.scrollY = startScroll + delta;
+        }
+        this._clampScroll(layout);
+        this.render();
+        return;
+      }
+
+      // Hover detection for scrollbar highlight
+      const hover = this._hitTestScrollbar(mx, my);
+      if (hover !== this._hoverScrollbar) {
+        this._hoverScrollbar = hover;
+        this.render();
+      }
+
       if (this.dragging) this._seekFromMouse(e);
     });
-    window.addEventListener('mouseup', () => { this.dragging = false; });
 
-    // Scroll: plain = zoom, Shift = horizontal scroll
+    window.addEventListener('mouseup', () => {
+      this.dragging = false;
+      this._scrollbarDrag = null;
+    });
+
+    // Wheel gestures:
+    //   plain        = vertical scroll
+    //   Shift        = horizontal scroll
+    //   Ctrl+Shift   = zoom (keep frame under mouse stable)
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
+      const layout = this._layout();
 
       if (e.ctrlKey && e.shiftKey) {
-        // Vertical scroll (reserved for future multi-row layouts)
-        // TODO: this.scrollY += e.deltaY
-        return;
-      } else if (e.shiftKey) {
-        // Horizontal scroll
-        const scrollAmount = (e.deltaY !== 0 ? e.deltaY : e.deltaX) / this.zoom * 3;
-        this.scrollX += scrollAmount;
-        this.scrollX = Math.max(0, this.scrollX);
-      } else {
         // Zoom (keep frame under mouse stable)
         const rect = this.canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const frameAtMouse = this.scrollX + mouseX / this.zoom;
 
         if (e.deltaY < 0) {
-          this.zoom = Math.min(this.maxZoom, this.zoom * 1.2);
+          this.zoom = Math.min(this.maxZoom, this.zoom * 1.15);
         } else {
-          this.zoom = Math.max(this.minZoom, this.zoom / 1.2);
+          this.zoom = Math.max(this.minZoom, this.zoom / 1.15);
         }
 
         this.scrollX = frameAtMouse - mouseX / this.zoom;
-        this.scrollX = Math.max(0, this.scrollX);
+      } else if (e.shiftKey) {
+        // Horizontal scroll
+        const delta = (e.deltaY !== 0 ? e.deltaY : e.deltaX);
+        this.scrollX += delta / this.zoom * 2;
+      } else {
+        // Vertical scroll
+        this.scrollY += e.deltaY;
       }
+
+      this._clampScroll(layout);
       this.render();
     }, { passive: false });
 
@@ -143,6 +241,17 @@ export class Timeline {
       this.resize();
       this.render();
     });
+  }
+
+  /** Hit-test scrollbar regions. Returns 'x', 'y', or null. */
+  _hitTestScrollbar(mx, my) {
+    const w = this.width;
+    const h = this.height;
+    // Horizontal scrollbar region: bottom strip
+    if (my >= h - SCROLLBAR_SIZE && mx < w - SCROLLBAR_SIZE) return 'x';
+    // Vertical scrollbar region: right strip
+    if (mx >= w - SCROLLBAR_SIZE && my < h - SCROLLBAR_SIZE) return 'y';
+    return null;
   }
 
   _seekFromMouse(e) {
@@ -172,18 +281,22 @@ export class Timeline {
       return;
     }
 
+    const layout = this._layout();
+    const { viewW, viewH, rowH, contentH } = layout;
+    this._clampScroll(layout);
+
     const frames = this.psg.frames;
     const totalFrames = this.psg.totalFrames;
     const zoom = this.zoom;
-    const scroll = this.scrollX;
+    const scrollX = this.scrollX;
+    const scrollY = this.scrollY;
 
     // Visible frame range
-    const firstFrame = Math.max(0, Math.floor(scroll));
-    const lastFrame = Math.min(totalFrames - 1, Math.ceil(scroll + w / zoom));
+    const firstFrame = Math.max(0, Math.floor(scrollX));
+    const lastFrame = Math.min(totalFrames - 1, Math.ceil(scrollX + viewW / zoom));
 
-    // Layout: divide height into rows (9 rows: 8 music + 1 scene)
-    const rowH = h / 9;
-    const rows = {
+    // Row positions (virtual Y, before scroll offset)
+    const rowDefs = {
       header: 0,
       volA: rowH * 1,
       volB: rowH * 2,
@@ -196,15 +309,27 @@ export class Timeline {
       scene: rowH * 8,
     };
 
+    // Apply scrollY: all row Y positions shift up
+    const rows = {};
+    for (const [key, val] of Object.entries(rowDefs)) {
+      rows[key] = val - scrollY;
+    }
+
+    // Clip to view area (exclude scrollbar regions)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, viewW, viewH);
+    ctx.clip();
+
     // Grid lines (every 50 frames = 1 second, every 10 frames)
     ctx.strokeStyle = COLORS.grid;
     ctx.lineWidth = 0.5;
     for (let f = Math.ceil(firstFrame / 10) * 10; f <= lastFrame; f += 10) {
-      const x = (f - scroll) * zoom;
+      const x = (f - scrollX) * zoom;
       ctx.strokeStyle = (f % 50 === 0) ? COLORS.gridMajor : COLORS.grid;
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
+      ctx.lineTo(x, viewH);
       ctx.stroke();
 
       // Time labels at second marks
@@ -212,12 +337,11 @@ export class Timeline {
         ctx.fillStyle = COLORS.textDim;
         ctx.font = '10px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(`${(f / 50).toFixed(0)}s`, x, 10);
+        ctx.fillText(`${(f / 50).toFixed(0)}s`, x, rows.header + 10);
       }
     }
 
     // Row labels
-    ctx.fillStyle = COLORS.textDim;
     ctx.font = '10px monospace';
     ctx.textAlign = 'left';
     const labels = [
@@ -240,7 +364,7 @@ export class Timeline {
     // Draw register data
     for (let f = firstFrame; f <= lastFrame; f++) {
       const r = frames[f];
-      const x = (f - scroll) * zoom;
+      const x = (f - scrollX) * zoom;
       const bw = Math.max(1, zoom - 0.5); // bar width
 
       // Volumes (0-15, scaled to row height)
@@ -314,7 +438,7 @@ export class Timeline {
       ctx.fillStyle = COLORS.drum;
       for (const f of this.events.drums) {
         if (f < firstFrame || f > lastFrame) continue;
-        const x = (f - scroll) * zoom;
+        const x = (f - scrollX) * zoom;
         ctx.beginPath();
         ctx.moveTo(x, rows.header + 14);
         ctx.lineTo(x - 3, rows.header + 20);
@@ -342,12 +466,12 @@ export class Timeline {
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(0, sceneY - 1);
-      ctx.lineTo(w, sceneY - 1);
+      ctx.lineTo(viewW, sceneY - 1);
       ctx.stroke();
 
       for (const scene of scenes) {
-        const x1 = Math.max(0, (scene.start - scroll) * zoom);
-        const x2 = Math.min(w, (scene.end - scroll) * zoom);
+        const x1 = Math.max(0, (scene.start - scrollX) * zoom);
+        const x2 = Math.min(viewW, (scene.end - scrollX) * zoom);
         if (x2 <= x1) continue;
 
         // Filled block
@@ -369,7 +493,6 @@ export class Timeline {
           ctx.textAlign = 'left';
           ctx.fillText(scene.label, x1 + 4, sceneY + 14);
 
-          // Frame range (smaller, dimmer)
           if (blockW > 100) {
             ctx.font = '9px monospace';
             ctx.globalAlpha = 0.6;
@@ -381,21 +504,20 @@ export class Timeline {
     }
 
     // Playback cursor
-    const cursorX = (this.currentFrame - scroll) * zoom;
-    if (cursorX >= 0 && cursorX <= w) {
-      // Vertical line
+    const cursorX = (this.currentFrame - scrollX) * zoom;
+    if (cursorX >= 0 && cursorX <= viewW) {
       ctx.strokeStyle = COLORS.cursor;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(cursorX, 0);
-      ctx.lineTo(cursorX, h);
+      ctx.lineTo(cursorX, viewH);
       ctx.stroke();
 
       // Frame number
       ctx.fillStyle = COLORS.cursor;
       ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`${this.currentFrame}`, cursorX, h - 4);
+      ctx.fillText(`${this.currentFrame}`, cursorX, viewH - 4);
     }
 
     // Info bar at top
@@ -405,7 +527,66 @@ export class Timeline {
     const timeStr = (this.currentFrame / 50).toFixed(2);
     ctx.fillText(
       `Frame ${this.currentFrame}/${totalFrames} | ${timeStr}s / ${(totalFrames / 50).toFixed(1)}s | Zoom: ${zoom.toFixed(1)}x`,
-      w - 8, 12
+      viewW - 8, rows.header + 12
     );
+
+    // End clipping for main content
+    ctx.restore();
+
+    // --- Scrollbars ---
+    this._drawScrollbars(ctx, w, h, viewW, viewH, totalFrames, contentH);
+  }
+
+  _drawScrollbars(ctx, w, h, viewW, viewH, totalFrames, contentH) {
+    const SB = SCROLLBAR_SIZE;
+
+    // Corner (bottom-right dead zone)
+    ctx.fillStyle = COLORS.scrollTrack;
+    ctx.fillRect(viewW, viewH, SB, SB);
+
+    // --- Horizontal scrollbar ---
+    const contentW = totalFrames * this.zoom;
+    const hVisible = contentW > 0 ? Math.min(1, viewW / contentW) : 1;
+    const hOffset = contentW > 0 ? (this.scrollX * this.zoom) / contentW : 0;
+
+    // Track
+    ctx.fillStyle = COLORS.scrollTrack;
+    ctx.fillRect(0, viewH, viewW, SB);
+
+    // Thumb
+    if (hVisible < 1) {
+      const thumbW = Math.max(20, viewW * hVisible);
+      const thumbX = hOffset * (viewW - thumbW);
+      const isActive = this._scrollbarDrag?.axis === 'x';
+      const isHover = this._hoverScrollbar === 'x';
+      ctx.fillStyle = isActive ? COLORS.scrollThumbActive
+                    : isHover  ? COLORS.scrollThumbHover
+                               : COLORS.scrollThumb;
+      ctx.beginPath();
+      ctx.roundRect(thumbX + 1, viewH + 2, thumbW - 2, SB - 4, 3);
+      ctx.fill();
+    }
+
+    // --- Vertical scrollbar ---
+    const vVisible = contentH > 0 ? Math.min(1, viewH / contentH) : 1;
+    const vOffset = contentH > viewH ? this.scrollY / (contentH - viewH) : 0;
+
+    // Track
+    ctx.fillStyle = COLORS.scrollTrack;
+    ctx.fillRect(viewW, 0, SB, viewH);
+
+    // Thumb
+    if (vVisible < 1) {
+      const thumbH = Math.max(20, viewH * vVisible);
+      const thumbY = vOffset * (viewH - thumbH);
+      const isActive = this._scrollbarDrag?.axis === 'y';
+      const isHover = this._hoverScrollbar === 'y';
+      ctx.fillStyle = isActive ? COLORS.scrollThumbActive
+                    : isHover  ? COLORS.scrollThumbHover
+                               : COLORS.scrollThumb;
+      ctx.beginPath();
+      ctx.roundRect(viewW + 2, thumbY + 1, SB - 4, thumbH - 2, 3);
+      ctx.fill();
+    }
   }
 }
