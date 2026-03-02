@@ -7,6 +7,7 @@
  *   - Noise activity
  *   - Envelope triggers
  *   - Drum hit markers
+ *   - Pattern grid (when module data loaded — colour-coded notes per channel)
  *   - Scene track (colored blocks for visual effects)
  *   - Playback cursor
  *   - Horizontal + vertical scrollbars
@@ -16,6 +17,7 @@
  *   Shift+Scroll    = horizontal scroll
  *   Ctrl+Shift+Scroll = zoom/scale
  */
+import { renderPatternGrid, renderPatternBoundaries } from './pattern-grid-renderer.js';
 
 const COLORS = {
   bg: '#1a1a2e',
@@ -54,6 +56,7 @@ export class Timeline {
     this.ctx = canvas.getContext('2d');
     this.psg = null;
     this.events = null;
+    this.moduleData = null;  // UnrolledTimeline from module files
     this.currentFrame = 0;
     this.scrollX = 0;         // in frames
     this.scrollY = 0;         // in pixels (into virtual content)
@@ -63,11 +66,13 @@ export class Timeline {
     this.dragging = false;
     this.onSeek = null;       // callback(frame) when user clicks
     this.sceneManager = null; // set by app.js
+    this.markerManager = null; // set by app.js
     this.musicCollapsed = false; // fold 8 music rows → 1 summary
 
     // Scrollbar interaction state
     this._scrollbarDrag = null;  // { axis: 'x'|'y', startMouse, startScroll }
     this._hoverScrollbar = null; // 'x', 'y', or null
+    this._maxScrollX = 0;
 
     this._bindEvents();
 
@@ -96,9 +101,10 @@ export class Timeline {
     this.height = rect.height;
   }
 
-  load(psg, events) {
+  load(psg, events, moduleData = null) {
     this.psg = psg;
     this.events = events;
+    this.moduleData = moduleData;
     this.scrollX = 0;
     this.scrollY = 0;
     this.render();
@@ -132,9 +138,11 @@ export class Timeline {
   _layout() {
     const viewW = this.width - SCROLLBAR_SIZE;
     const viewH = this.height - SCROLLBAR_SIZE;
-    // Collapsed: 1 music summary + 1 header + 1 scene = 3 virtual rows
+    // Collapsed: 1 header + 1 music summary + 1 scene = 3
     // Expanded:  1 header + 8 music rows + 1 scene = 10 (we use 9 with fractional)
-    const numRows = this.musicCollapsed ? 3 : 9;
+    // +1 if module data present (pattern grid row)
+    let numRows = this.musicCollapsed ? 3 : 9;
+    if (this.moduleData) numRows += 1;
     const rowH = Math.max(MIN_ROW_HEIGHT, viewH / numRows);
     const contentH = rowH * numRows;
     return { viewW, viewH, rowH, contentH, numRows };
@@ -143,9 +151,11 @@ export class Timeline {
   _clampScroll(layout) {
     const { viewW, viewH, contentH } = layout;
     const totalFrames = this.psg ? this.psg.totalFrames : 0;
-    // Horizontal: frame-based
-    const maxScrollX = Math.max(0, totalFrames - viewW / this.zoom);
+    // Horizontal: allow scrolling so last frame can sit at ~10% from right edge
+    const margin = viewW / this.zoom * 0.9;
+    const maxScrollX = Math.max(0, totalFrames - margin);
     this.scrollX = Math.max(0, Math.min(this.scrollX, maxScrollX));
+    this._maxScrollX = maxScrollX; // cache for scrollbar rendering
     // Vertical: pixel-based
     const maxScrollY = Math.max(0, contentH - viewH);
     this.scrollY = Math.max(0, Math.min(this.scrollY, maxScrollY));
@@ -198,10 +208,11 @@ export class Timeline {
         const { axis, startMouse, startScroll } = this._scrollbarDrag;
         if (axis === 'x') {
           const trackW = layout.viewW;
-          const totalFrames = this.psg ? this.psg.totalFrames : 1;
-          const contentW = totalFrames * this.zoom;
-          const ratio = contentW / trackW;
-          const delta = (mx - startMouse) * ratio / this.zoom;
+          const maxSX = this._maxScrollX || 1;
+          const contentW = (this.psg ? this.psg.totalFrames : 1) * this.zoom;
+          const thumbW = Math.max(20, trackW * Math.min(1, trackW / contentW));
+          const scrollRange = trackW - thumbW;
+          const delta = scrollRange > 0 ? (mx - startMouse) / scrollRange * maxSX : 0;
           this.scrollX = startScroll + delta;
         } else {
           const trackH = layout.viewH;
@@ -253,7 +264,7 @@ export class Timeline {
       } else if (e.shiftKey) {
         // Horizontal scroll
         const delta = (e.deltaY !== 0 ? e.deltaY : e.deltaX);
-        this.scrollX += delta / this.zoom * 2;
+        this.scrollX += delta / this.zoom * 4;
       } else {
         // Vertical scroll
         this.scrollY += e.deltaY;
@@ -304,7 +315,7 @@ export class Timeline {
       ctx.fillStyle = COLORS.textDim;
       ctx.font = '16px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('Drop a .psg file here', w / 2, h / 2);
+      ctx.fillText('Drop a file here (.psg / .vt2 / .btp)', w / 2, h / 2);
       return;
     }
 
@@ -322,12 +333,14 @@ export class Timeline {
     const firstFrame = Math.max(0, Math.floor(scrollX));
     const lastFrame = Math.min(totalFrames - 1, Math.ceil(scrollX + viewW / zoom));
 
-    // Row positions depend on collapsed state
+    // Row positions depend on collapsed state and module data
     const rowDefs = {};
     if (this.musicCollapsed) {
       rowDefs.header = 0;
-      rowDefs.musicSummary = rowH * 1;  // single summary row
-      rowDefs.scene = rowH * 2;
+      rowDefs.musicSummary = rowH * 1;
+      let nextRow = 2;
+      if (this.moduleData) { rowDefs.patternGrid = rowH * nextRow; nextRow++; }
+      rowDefs.scene = rowH * nextRow;
     } else {
       rowDefs.header = 0;
       rowDefs.volA = rowH * 1;
@@ -338,7 +351,9 @@ export class Timeline {
       rowDefs.toneC = rowH * 5.5;
       rowDefs.noise = rowH * 6.25;
       rowDefs.envelope = rowH * 7;
-      rowDefs.scene = rowH * 8;
+      let nextRow = 8;
+      if (this.moduleData) { rowDefs.patternGrid = rowH * nextRow; nextRow++; }
+      rowDefs.scene = rowH * nextRow;
     }
 
     // Apply scrollY: all row Y positions shift up
@@ -394,6 +409,16 @@ export class Timeline {
       }
     }
 
+    // Pattern grid row (module data)
+    if (this.moduleData && rows.patternGrid !== undefined) {
+      renderPatternGrid(ctx, this.moduleData, scrollX, zoom, rows.patternGrid, rowH, viewW);
+    }
+
+    // Pattern boundary lines across all rows
+    if (this.moduleData) {
+      renderPatternBoundaries(ctx, this.moduleData, scrollX, zoom, viewW, viewH);
+    }
+
     // Scene track
     if (this.sceneManager) {
       const sceneY = rows.scene;
@@ -446,6 +471,30 @@ export class Timeline {
             ctx.fillText(`${scene.start}-${scene.end}`, x1 + 4, sceneY + sceneH - 2);
             ctx.globalAlpha = 1.0;
           }
+        }
+      }
+    }
+
+    // Marker tracks (rendered as thin tracks above the cursor)
+    if (this.markerManager) {
+      const markers = this.markerManager.getMarkersInRange(firstFrame, lastFrame);
+      for (const marker of markers) {
+        const mx = (marker.frame - scrollX) * zoom;
+        // Vertical line
+        ctx.strokeStyle = marker.color;
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(mx, 0);
+        ctx.lineTo(mx, viewH);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+        // Label tag
+        if (marker.label && zoom >= 1) {
+          ctx.fillStyle = marker.color;
+          ctx.font = 'bold 9px monospace';
+          ctx.textAlign = 'left';
+          ctx.fillText(marker.label, mx + 2, rows.header + 24);
         }
       }
     }
@@ -665,7 +714,8 @@ export class Timeline {
     // --- Horizontal scrollbar ---
     const contentW = totalFrames * this.zoom;
     const hVisible = contentW > 0 ? Math.min(1, viewW / contentW) : 1;
-    const hOffset = contentW > 0 ? (this.scrollX * this.zoom) / contentW : 0;
+    const maxSX = this._maxScrollX || 1;
+    const hRatio = maxSX > 0 ? this.scrollX / maxSX : 0;
 
     // Track
     ctx.fillStyle = COLORS.scrollTrack;
@@ -674,7 +724,7 @@ export class Timeline {
     // Thumb
     if (hVisible < 1) {
       const thumbW = Math.max(20, viewW * hVisible);
-      const thumbX = hOffset * (viewW - thumbW);
+      const thumbX = hRatio * (viewW - thumbW);
       const isActive = this._scrollbarDrag?.axis === 'x';
       const isHover = this._hoverScrollbar === 'x';
       ctx.fillStyle = isActive ? COLORS.scrollThumbActive

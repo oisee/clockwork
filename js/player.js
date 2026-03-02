@@ -16,8 +16,8 @@ export class Player {
     this.startFrame = 0;      // frame number when playback started
   }
 
-  async init() {
-    this.audioCtx = new AudioContext({ sampleRate: 44100 });
+  async init(externalAudioCtx) {
+    this.audioCtx = externalAudioCtx || new AudioContext({ sampleRate: 44100 });
 
     if (!this.audioCtx.audioWorklet) {
       throw new Error('AudioWorklet not supported in this browser. Try Chrome or Edge.');

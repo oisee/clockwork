@@ -23,24 +23,87 @@
   </script>
 </head>
 <body>
-  <!-- Top toolbar (outside Golden Layout) -->
+  <!-- Top bar: menu + transport -->
   <header>
-    <h1>Clockwork <span>Sync Editor v0.2</span></h1>
+    <h1>Clockwork <span>v0.2</span></h1>
+
+    <nav id="menu-bar">
+      <div class="menu">
+        <button class="menu-trigger">File</button>
+        <div class="menu-dropdown">
+          <button data-action="open">Open&#x2026;<kbd>Ctrl+O</kbd></button>
+          <button data-action="demo">Load Demo</button>
+          <div class="menu-sep"></div>
+          <button data-action="export-scenes">Export Scenes&#x2026;</button>
+          <button data-action="import-scenes">Import Scenes&#x2026;</button>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="menu-trigger">View</button>
+        <div class="menu-dropdown">
+          <button data-action="reset-layout">Reset Layout</button>
+          <div class="menu-sep"></div>
+          <button data-action="panel-timeline">Timeline</button>
+          <button data-action="panel-preview">Preview</button>
+          <button data-action="panel-properties">Properties</button>
+          <div class="menu-sep"></div>
+          <button data-action="zoom-in">Zoom In<kbd>Ctrl+=</kbd></button>
+          <button data-action="zoom-out">Zoom Out<kbd>Ctrl+-</kbd></button>
+          <button data-action="zoom-fit">Zoom to Fit<kbd>Ctrl+0</kbd></button>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="menu-trigger">Transport</button>
+        <div class="menu-dropdown">
+          <button data-action="play">Play / Pause<kbd>Space</kbd></button>
+          <button data-action="stop">Stop</button>
+          <button data-action="goto-start">Go to Start<kbd>Home</kbd></button>
+          <div class="menu-sep"></div>
+          <button data-action="step-fwd">Step Forward<kbd>&#x2192;</kbd></button>
+          <button data-action="step-back">Step Back<kbd>&#x2190;</kbd></button>
+          <button data-action="jump-fwd">Jump +50<kbd>Shift+&#x2192;</kbd></button>
+          <button data-action="jump-back">Jump -50<kbd>Shift+&#x2190;</kbd></button>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="menu-trigger">Scene</button>
+        <div class="menu-dropdown">
+          <button data-action="add-scene">Add Scene<kbd>Ins</kbd></button>
+          <button data-action="delete-scene">Delete Scene<kbd>Del</kbd></button>
+          <div class="menu-sep"></div>
+          <button data-action="clear-scenes">Clear All Scenes</button>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="menu-trigger">Markers</button>
+        <div class="menu-dropdown">
+          <button data-action="add-marker-layer">Add Layer</button>
+          <button data-action="add-marker">Add Marker<kbd>M</kbd></button>
+          <div class="menu-sep"></div>
+          <button data-action="export-markers-json">Export Markers (JSON)&#x2026;</button>
+          <button data-action="export-markers-asm">Export Markers (ASM)&#x2026;</button>
+          <button data-action="import-markers">Import Markers&#x2026;</button>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="menu-trigger">Help</button>
+        <div class="menu-dropdown">
+          <button data-action="shortcuts">Keyboard Shortcuts&#x2026;</button>
+          <div class="menu-sep"></div>
+          <button data-action="about">About Clockwork</button>
+        </div>
+      </div>
+    </nav>
+
+    <span class="header-spacer"></span>
+
+    <!-- Transport controls -->
     <span id="file-name"></span>
     <div class="header-controls">
-      <button id="btn-demo">Demo</button>
       <button id="btn-play" data-state="paused">Play</button>
       <button id="btn-stop">Stop</button>
     </div>
     <span id="info-bar"></span>
-    <span class="shortcuts">
-      <kbd>Space</kbd> play
-      <kbd>&larr;&rarr;</kbd> seek
-      <kbd>Scroll</kbd> V
-      <kbd>Shift</kbd> H
-      <kbd>Ctrl+Shift</kbd> zoom
-      <kbd>DblClick</kbd> fold
-    </span>
   </header>
 
   <!-- Golden Layout container -->
@@ -49,7 +112,7 @@
   <!-- Status bar (outside Golden Layout) -->
   <div id="status-bar"></div>
 
-  <input type="file" id="file-input" accept=".psg">
+  <input type="file" id="file-input" accept=".psg,.vt2,.btp">
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
